@@ -1,0 +1,435 @@
+================================================================================
+FASTAPI & .NET INTEGRATION PLAN (v2 — SQL-First Architecture)
+Sistem Demand Forecasting Vending Machine Susu — PT GS Battery
+Terakhir diperbarui: 12 Mei 2026
+================================================================================
+
+DOKUMEN INI ADALAH BLUEPRINT UNTUK AI ASSISTANT SELANJUTNYA (FASTAPI MASTER).
+Fokus utama: Membungkus model Layer 1 (XGBoost) dan Layer 2 (Distribusi Harian)
+ke dalam Microservice FastAPI yang SEPENUHNYA menggunakan SQL Server sebagai
+sumber data dan penyimpanan hasil — TANPA ketergantungan CSV.
+
+================================================================================
+1. ARSITEKTUR UMUM (END-TO-END — SQL-FIRST)
+================================================================================
+
+  [SQL Server: db_vending_machine]
+         │
+         ├── INPUT TABLES (sudah ada):
+         │   ├── [dbo].[monitor_log_datatransaksi]  ← Raw transaksi mesin
+         │   ├── [dbo].[Vending_Aggregrated]         ← Agregasi harian (sudah rapih)
+         │   ├── [dbo].[vending_training_ml]         ← Data training ML (bulanan)
+         │   └── [dbo].[OperationalCalendar]         ← Kalender libur/ramadan/shift
+         │
+         ▼
+  [FastAPI Microservice (Python)]
+         │ 1. Baca training data dari [vending_training_ml] (BUKAN CSV)
+         │ 2. Baca data historis harian dari [Vending_Aggregrated] (BUKAN CSV)
+         │ 3. Baca kalender dari [OperationalCalendar]
+         │ 4. Jalankan Layer 1 → simpan hasil ke [ForecastResults_Layer1]
+         │ 5. Jalankan Layer 2 → simpan hasil ke [ForecastResults_Layer2]
+         │ 6. Perbandingan otomatis pred vs aktual dari [Vending_Aggregrated]
+         ▼
+  [SQL Server: OUTPUT TABLES (baru)]
+         │   ├── [dbo].[ForecastResults_Layer1]  ← Hasil prediksi bulanan + metrik
+         │   └── [dbo].[ForecastResults_Layer2]  ← Hasil distribusi harian × shift
+         ▼
+  [.NET Framework (UI/Dashboard)]
+         (Membaca hasil prediksi dari SQL Server)
+
+================================================================================
+2. PERUBAHAN KRITIS: CSV → SQL TABLE MAPPING
+================================================================================
+
+  Setiap file CSV yang sebelumnya digunakan DIGANTI dengan tabel SQL:
+
+  ┌─────────────────────────────────┬──────────────────────────────────────┐
+  │ CSV LAMA                        │ SQL TABLE PENGGANTI                  │
+  ├─────────────────────────────────┼──────────────────────────────────────┤
+  │ V3_m1_training_data.csv         │ [dbo].[vending_training_ml]          │
+  │ vending_daily_FEATUREDFORV6.csv │ [dbo].[Vending_Aggregrated]          │
+  │ SUSU_ready_v2.csv               │ [dbo].[Vending_Aggregrated]          │
+  │                                 │ (filter tahun 2026 untuk aktual)     │
+  │ forecast_layer2_fixed2.csv      │ [dbo].[ForecastResults_Layer2]       │
+  │ V6_mape_smoother_ON.json        │ Kolom di [ForecastResults_Layer1]    │
+  └─────────────────────────────────┴──────────────────────────────────────┘
+
+  CATATAN PENTING tentang SUSU_ready_v2.csv:
+    File ini TIDAK PERLU dibuatkan tabel khusus. Data aktual 2026 sudah ada
+    (atau akan diinput) di [Vending_Aggregrated]. Untuk perbandingan prediksi
+    vs aktual, cukup query [Vending_Aggregrated] WHERE tahun = 2026.
+
+================================================================================
+3. TABEL OUTPUT BARU — DESAIN SKEMA
+================================================================================
+
+─── 3A. [dbo].[ForecastResults_Layer1] ─────────────────────────────────────────
+
+  Menyimpan hasil prediksi Layer 1 (bulanan) + semua metrik evaluasi.
+  Setiap kali prediksi dijalankan, INSERT baris baru (histori prediksi).
+
+  CREATE TABLE [dbo].[ForecastResults_Layer1] (
+      Id                  INT IDENTITY(1,1) PRIMARY KEY,
+      -- Identifikasi
+      PredictedMonth      VARCHAR(7) NOT NULL,        -- '2026-04'
+      RunTimestamp         DATETIME NOT NULL,          -- kapan prediksi dijalankan
+      ModelVersion         VARCHAR(20),                -- 'V6+'
+      
+      -- Hasil Prediksi
+      TotalDemand          INT NOT NULL,               -- pred_final total
+      DemandCoklat         INT,
+      DemandMoca           INT,
+      DemandOriginal       INT,
+      DemandStrawberry     INT,
+      IsBusinessLogic      BIT DEFAULT 0,              -- Step 9 aktif?
+      ProductiveDays       FLOAT,                      -- hari produktif kalender
+      
+      -- Metrik Evaluasi (dari JSON V6_mape_smoother_ON)
+      MAPE_Total           FLOAT,                      -- 3.3956
+      MAE_Total            FLOAT,                      -- 2607.0
+      RMSE_Total           FLOAT,                      -- 3191.77
+      MAPE_Coklat          FLOAT,                      -- 5.0489
+      MAPE_Moca            FLOAT,                      -- 4.2642
+      MAPE_Original        FLOAT,                      -- 1.6307
+      MAPE_Strawberry      FLOAT,                      -- 3.1112
+      SmootherEnabled      BIT DEFAULT 1,
+      
+      -- Akurasi vs Aktual (diisi SETELAH data aktual masuk)
+      ActualDemand         INT NULL,                   -- dari [Vending_Aggregrated]
+      ErrorPercent         FLOAT NULL,                 -- (pred - actual) / actual * 100
+      ActualUpdatedAt      DATETIME NULL,              -- kapan aktual diisi
+      
+      -- Patch Log (JSON string — detail smoother patches)
+      PatchLogJson         NVARCHAR(MAX) NULL
+  );
+
+  CATATAN:
+  - RunTimestamp = kapan waktu prediksi dijalankan
+  - ActualDemand & ErrorPercent diisi belakangan via endpoint terpisah
+    setelah data bulan tersebut sudah masuk ke [Vending_Aggregrated]
+  - PatchLogJson menyimpan isi patch_log dari JSON smoother
+
+─── 3B. [dbo].[ForecastResults_Layer2] ─────────────────────────────────────────
+
+  Menyimpan output distribusi Layer 2 (harian × shift × varian).
+  Menggantikan output CSV forecast_layer2_fixed2.csv.
+
+  CREATE TABLE [dbo].[ForecastResults_Layer2] (
+      Id                  INT IDENTITY(1,1) PRIMARY KEY,
+      RunTimestamp         DATETIME NOT NULL,          -- kapan dijalankan
+      PredictedMonth      VARCHAR(7) NOT NULL,         -- '2026-01'
+      Date                DATE NOT NULL,
+      DayName             VARCHAR(10),                 -- 'Monday'
+      Shift               VARCHAR(30) NOT NULL,        -- 'SHIFT1 - AKHIR'
+      Variant             VARCHAR(30) NOT NULL,        -- 'Coklat'
+      PredictedDemand     INT NOT NULL,
+      IsHoliday           BIT DEFAULT 0,
+      IsRamadan           BIT DEFAULT 0,
+      IsWeekend           BIT DEFAULT 0,
+      
+      -- Aktual (diisi belakangan dari [Vending_Aggregrated])
+      ActualDemand         INT NULL,
+      ErrorPercent         FLOAT NULL
+  );
+
+  INDEX: IX_Layer2_DateShiftVariant ON (Date, Shift, Variant)
+
+================================================================================
+4. DESAIN API ENDPOINT
+================================================================================
+
+─── 4A. ENDPOINT UTAMA: GENERATE FORECAST ──────────────────────────────────────
+
+  Route  : POST /api/v1/forecast/generate
+  Params : { "year": 2026, "month": 4 }
+  Proses :
+    1. Baca [vending_training_ml] → bangun DataFrame training (BUKAN CSV)
+    2. Baca [OperationalCalendar] → kalender target bulan
+    3. Load Layer1_XGBoost_V6_Artifact.joblib
+    4. Jalankan Layer 1 → prediksi total bulanan per varian
+    5. INSERT hasil ke [ForecastResults_Layer1]
+    6. Baca [Vending_Aggregrated] → data historis harian (BUKAN CSV)
+    7. Jalankan Layer 2 → distribusi ke shift × hari × varian
+    8. INSERT hasil ke [ForecastResults_Layer2]
+  Response:
+    {
+      "status": "success",
+      "predicted_month": "2026-04",
+      "total_demand": 76500,
+      "by_variant": {"Coklat": 38000, "Moca": 12000, ...},
+      "rows_inserted_layer2": 960,
+      "run_timestamp": "2026-05-12T12:30:00"
+    }
+
+─── 4B. ENDPOINT: UPDATE AKTUAL ────────────────────────────────────────────────
+
+  Route  : POST /api/v1/forecast/update-actuals
+  Params : { "month": "2026-04" }
+  Proses :
+    1. Query [Vending_Aggregrated] WHERE bulan = target → hitung total aktual
+    2. UPDATE [ForecastResults_Layer1] SET ActualDemand, ErrorPercent
+    3. JOIN [ForecastResults_Layer2] dengan [Vending_Aggregrated]
+       pada (Date, Shift, Variant) → UPDATE ActualDemand, ErrorPercent
+  Response:
+    {
+      "status": "success",
+      "month": "2026-04",
+      "predicted": 76500,
+      "actual": 75800,
+      "error_percent": "+0.92%"
+    }
+
+  CATATAN: Endpoint ini dipanggil SETELAH data aktual bulan tersebut
+  sudah diinput ke [Vending_Aggregrated]. Bisa dijadwalkan otomatis
+  di awal bulan berikutnya.
+
+─── 4C. ENDPOINT: LAYER 1 DETAIL (Opsional / Debug) ───────────────────────────
+
+  Route  : GET /api/v1/forecast/layer1?year=2026&month=4
+  Response: JSON detail per varian + metrik model
+
+─── 4D. ENDPOINT: RETRAINING ──────────────────────────────────────────────────
+
+  Route  : POST /api/v1/model/retrain
+  Trigger: Admin via dashboard .NET, atau cron job tiap kuartal
+  Proses :
+    1. Baca [vending_training_ml] (BUKAN CSV — tabel sudah diupdate
+       oleh pipeline ETL yang terpisah)
+    2. Jalankan Script_Model_XGBoost_V6_Fallback.py (logic training)
+    3. Overwrite Layer1_XGBoost_V6_Artifact.joblib
+    4. Profil DOW dan Shift otomatis menggunakan data terbaru
+  Response:
+    { "status": "success", "new_mape": "3.2%" }
+
+  PENTING: Gunakan BackgroundTasks karena training bisa makan waktu.
+
+─── 4E. ENDPOINT: RIWAYAT PREDIKSI ────────────────────────────────────────────
+
+  Route  : GET /api/v1/forecast/history?month=2026-04
+  Proses : Query [ForecastResults_Layer1] ORDER BY RunTimestamp DESC
+  Response: List semua run prediksi untuk bulan tersebut, termasuk
+            akurasi jika aktual sudah tersedia.
+
+─── 4F. ENDPOINT: ETL PIPELINE ────────────────────────────────────────────────
+
+  Route  : POST /api/v1/pipeline/run-etl
+  Proses :
+    1. [monitor_log_datatransaksi] → proses → INSERT ke [Vending_Aggregrated]
+    2. [Vending_Aggregrated] → feature engineering → INSERT ke [vending_training_ml]
+  Response: { "status": "success", "rows_processed": 1500 }
+
+  CATATAN: Pipeline ini sudah ada sebagai Script_Pipeline_Databuilder.py.
+  Perlu di-refactor agar membaca dari SQL (bukan CSV) dan menulis ke SQL.
+
+================================================================================
+5. DATA FLOW: PERBANDINGAN PREDIKSI vs AKTUAL
+================================================================================
+
+  Cara kerja perbandingan (menggantikan SUSU_ready_v2.csv):
+
+  1. Prediksi bulan April 2026 dijalankan → hasil masuk ke SQL tables
+  2. Selama April 2026, data transaksi harian masuk ke [monitor_log_datatransaksi]
+  3. Pipeline ETL mengagregasi ke [Vending_Aggregrated]
+  4. Awal Mei 2026, panggil POST /api/v1/forecast/update-actuals?month=2026-04
+  5. Sistem otomatis:
+     a. SUM demand dari [Vending_Aggregrated] WHERE bulan = 2026-04
+     b. UPDATE Layer1: ActualDemand, ErrorPercent
+     c. JOIN Layer2 dengan [Vending_Aggregrated] pada (tanggal, shift, varian)
+     d. UPDATE Layer2: ActualDemand, ErrorPercent per baris
+  6. .NET dashboard langsung bisa menampilkan perbandingan
+
+  QUERY CONTOH untuk perbandingan Layer 2:
+    SELECT 
+      l2.Date, l2.Shift, l2.Variant,
+      l2.PredictedDemand,
+      va.demand AS ActualDemand,
+      CASE WHEN va.demand > 0 
+           THEN (l2.PredictedDemand - va.demand) * 100.0 / va.demand 
+           ELSE NULL END AS ErrorPercent
+    FROM [ForecastResults_Layer2] l2
+    LEFT JOIN [Vending_Aggregrated] va
+      ON l2.Date = va.tanggal 
+      AND l2.Shift = va.keterangan 
+      AND l2.Variant = va.nama_variant
+    WHERE l2.PredictedMonth = '2026-04'
+
+================================================================================
+6. MAPPING KOLOM: [Vending_Aggregrated] → PENGGANTI CSV
+================================================================================
+
+  Kolom [Vending_Aggregrated] yang relevan:
+    tanggal       → Date
+    keterangan    → Shift (contoh: 'SHIFT1 - AKHIR')
+    nama_variant  → Variant (contoh: 'Coklat')
+    demand        → Demand aktual
+    is_holiday    → Flag hari libur
+    is_weekend    → Flag akhir pekan
+    is_ramadan    → Flag Ramadan (PERLU DITAMBAHKAN jika belum ada)
+
+  Kolom [vending_training_ml] yang relevan:
+    Harus match dengan kolom yang dibutuhkan Script_Model_XGBoost_V6_Fallback.py:
+    period, demand, n_days, ramadan_days, holiday_days, weekend_days,
+    working_days, month_idx, var_Coklat/Moca/Original/Strawberry,
+    month_sin, month_cos, variant, lag_1m, lag_2m, lag_3m,
+    rolling_avg_3m, growth_rate, share_pct, share_lag_1m, share_change,
+    total_demand_lag_1m, lag_12m, dll.
+
+  PERHATIAN: Jika kolom [Vending_Aggregrated] belum punya is_ramadan,
+  tambahkan kolom tersebut. Bisa dihitung dari [OperationalCalendar].
+
+================================================================================
+7. REFACTORING YANG DIPERLUKAN
+================================================================================
+
+  7A. Script_Pipeline_Databuilder.py
+      LAMA: build_v3_exact_features("vending_daily_aggregated_FORV6.csv", "output.csv")
+      BARU: build_v3_exact_features_from_sql(engine) → INSERT ke [vending_training_ml]
+      
+      Perubahan:
+      - pd.read_csv(input_csv) → pd.read_sql("SELECT * FROM [Vending_Aggregrated]", engine)
+      - df_final.to_csv(output_csv) → df_final.to_sql("vending_training_ml", engine, 
+                                         if_exists="replace", index=False)
+      - WAJIB implementasi Conditional Ramadan Lag Skipper (lihat Section 7E)
+
+  7B. Script_Model_XGBoost_V6_Fallback.py
+      LAMA: df = pd.read_csv(CSV_PATH)
+      BARU: df = pd.read_sql("SELECT * FROM [vending_training_ml]", engine)
+      
+      LAMA: ACTUALS_OVERRIDE hardcoded
+      BARU: Query dari [Vending_Aggregrated] GROUP BY bulan SUM(demand)
+
+  7C. Script_production_daily_2_prod_v2.py
+      LAMA: df_daily_hist = pd.read_csv(DAILY_HIST_CSV)
+      BARU: df_daily_hist = pd.read_sql("SELECT * FROM [Vending_Aggregrated]", engine)
+      
+      LAMA: df_out.to_csv(OUTPUT_CSV)
+      BARU: df_out.to_sql("ForecastResults_Layer2", engine, if_exists="append", index=False)
+
+      LAMA: Perbandingan vs SUSU_ready_v2.csv
+      BARU: Perbandingan vs [Vending_Aggregrated] WHERE year = 2026
+
+  7D. Layer1_Core.py — TIDAK PERLU DIUBAH
+      Class Layer1Model tetap utuh. Artifact .joblib tetap digunakan.
+
+─── 7E. CONDITIONAL RAMADAN LAG SKIPPER (KRITIS — WAJIB DIBACA) ────────────────
+
+  KONTEKS MASALAH:
+    Saat data aktual 2026 (Jan-Mar) dimasukkan ke [vending_training_ml] untuk
+    retraining, baris April 2026 akan punya lag_1m = Maret 2026 (~5K demand).
+    Ini menyebabkan model melihat momentum "jatuh drastis" dan memprediksi
+    April hanya ~50K — padahal April punya 22 hari kerja dan seharusnya ~76K.
+
+  SOLUSI — DUAL-MODE LAG COMPUTATION:
+    Historis (2023–2025): lag_1m, lag_2m, lag_3m dihitung NATURAL (shift 1, 2, 3)
+    Data 2026+         : lag_1m, lag_2m, lag_3m WAJIB SKIP bulan Ramadan
+
+  MENGAPA HISTORIS HARUS TETAP NATURAL:
+    Model XGBoost belajar pola "setelah lag rendah (Ramadan) → rebound tinggi"
+    dari data historis. Jika lag historis juga di-skip, model KEHILANGAN memori
+    recovery pattern ini. Sudah diuji: prediksi Jan 2026 turun dari 78K ke 74K
+    saat lag historis di-skip — MEMBURUK.
+
+  MENGAPA 2026+ HARUS DI-SKIP:
+    Berbeda dari pola historis dimana Ramadan jatuh di bulan yang "sudah dikenal"
+    model, data 2026 adalah DATA BARU yang belum pernah dilihat model saat
+    training awal. Jika April 2026 punya lag_1m = 5K (Maret Ramadan), model
+    akan memperlakukan ini sebagai "penurunan demand sungguhan" — bukan Ramadan.
+    Lag Skipper memastikan model mendapat konteks semantik yang benar.
+
+  CONTOH KONKRET APRIL 2026:
+    TANPA skip: lag_1m = Mar 2026 (5,544)  → prediksi ~50K ❌
+    DENGAN skip: lag_1m = Jan 2026 (78,332) → prediksi ~76K ✅
+                 lag_2m = Des 2025 (77,xxx) → momentum normal
+
+  IMPLEMENTASI DI PIPELINE DATABUILDER:
+    Saat membangun fitur lag untuk [vending_training_ml]:
+
+    RAMADAN_MONTHS = ["2023-03","2023-04","2024-03","2024-04",
+                      "2025-03","2026-02","2026-03","2027-02","2027-03"]
+    SKIP_CUTOFF = "2026-01"  # Mulai dari data 2026, lag di-skip
+
+    def compute_lag(df, variant, period_str, lag_n):
+        if period_str >= SKIP_CUTOFF:
+            # MODE SKIP: lompati bulan Ramadan
+            curr = period_str
+            count = 0
+            while count < lag_n:
+                curr = prev_month(curr)  # mundur 1 bulan
+                if curr not in RAMADAN_MONTHS:
+                    count += 1
+            return get_demand(df, variant, curr)
+        else:
+            # MODE NATURAL: shift biasa (historis)
+            return df.groupby('variant')['demand'].shift(lag_n)
+
+  DAMPAK KE FITUR TURUNAN:
+    Jika lag_1m, lag_2m, lag_3m berubah, maka fitur berikut juga berubah:
+      - rolling_avg_3m  = mean(lag_1m, lag_2m, lag_3m)
+      - growth_rate     = (demand / lag_1m) - 1
+      - trend_slope_3m  = (lag_1m - lag_3m) / 2
+      - yoy_change      = (lag_1m / lag_12m) - 1  ← lag_12m TETAP absolut
+      - demand_acceleration = growth_rate - prev_growth_rate
+    Semua fitur turunan HARUS di-recompute setelah lag di-skip.
+
+  CATATAN: lag_12m (YoY) TIDAK di-skip — selalu absolut 12 bulan lalu.
+  Jika lag_12m jatuh di bulan Ramadan, YoY Ramadan Guard (yoy=0.0) sudah
+  menanganinya di Layer1_Core.py.
+
+  KONSISTENSI DENGAN INFERENCE:
+    Logic ini IDENTIK dengan yang ada di Layer1_Core.py method build_features()
+    yaitu _get_normal_lag_month(). Bedanya:
+      - Layer1_Core: diterapkan saat inference (predict bulan baru)
+      - Pipeline Databuilder: diterapkan saat membangun training data 2026+
+    Keduanya menghasilkan lag yang sama → tidak ada train-test mismatch
+    untuk data 2026+.
+
+================================================================================
+8. DATABASE & KONEKSI
+================================================================================
+
+  Server   : ADAM123\SQLEXPRESS
+  Database : db_vending_machine
+  Auth     : SQL Server (sa / 07Mei2005)
+  Driver   : ODBC Driver 17 for SQL Server
+  Library  : SQLAlchemy + pyodbc (sudah ada di Script_Connection_SqlServer.py)
+
+  Tabel SQL Server yang diakses FastAPI:
+    INPUT  (sudah ada):
+      1. [dbo].[monitor_log_datatransaksi]  — Raw transaksi
+      2. [dbo].[Vending_Aggregrated]         — Agregasi harian
+      3. [dbo].[vending_training_ml]         — Training data ML
+      4. [dbo].[OperationalCalendar]         — Kalender operasional
+    
+    OUTPUT (baru, perlu CREATE):
+      5. [dbo].[ForecastResults_Layer1]      — Hasil + metrik Layer 1
+      6. [dbo].[ForecastResults_Layer2]      — Distribusi harian Layer 2
+
+================================================================================
+9. INSTRUKSI KERJA UNTUK AI FASTAPI
+================================================================================
+
+  ATURAN UTAMA:
+  - JANGAN UBAH LOGIKA MACHINE LEARNING. Gunakan Layer1Model dari Layer1_Core.py.
+  - Bungkus Layer 2 (Script_production_daily_2_prod_v2.py) menjadi fungsi modular:
+      def generate_layer2_distribution(layer1_output, engine) → DataFrame
+  - Gunakan BackgroundTasks untuk Retraining (mencegah API Timeout).
+  - Koneksi SQL pakai SQLAlchemy + pyodbc (dari Script_Connection_SqlServer.py).
+  - SEMUA data source HARUS dari SQL — BUKAN CSV.
+  - WAJIB implementasi Conditional Ramadan Lag Skipper (Section 7E) di pipeline
+    retraining. Historis (2023-2025) = natural lag, data 2026+ = skip Ramadan.
+    JANGAN terapkan skip ke seluruh historis — sudah diuji, memperburuk akurasi.
+
+  URUTAN IMPLEMENTASI:
+  1. CREATE tabel output (Layer1 & Layer2) di SQL Server
+  2. Refactor Script_Pipeline_Databuilder.py → SQL-based + Conditional Lag Skipper
+  3. Refactor Script_Model_XGBoost_V6_Fallback.py → SQL-based
+  4. Refactor Script_production_daily_2_prod_v2.py → SQL-based
+  5. Bangun FastAPI app dengan endpoint Section 4
+  6. Test end-to-end: generate → update-actuals → verify di SQL
+  7. Validasi: prediksi April 2026 harus ~76K (bukan ~50K) — jika 50K,
+     lag skipper belum bekerja dengan benar
+
+================================================================================
+Dibuat oleh  : AI Assistant bersama pengguna
+Terakhir update: 13 Mei 2026
+================================================================================

@@ -1,0 +1,129 @@
+================================================================================
+LAPORAN EVALUASI SISTEM DEMAND FORECASTING
+PT GS BATTERY — VENDING MACHINE
+================================================================================
+Tanggal Evaluasi: 10 Mei 2026 (Updated 11 Mei 2026 — Post Smart Event Classifier v2.2)
+Evaluator: AI Assistant & Data Engineering Team
+
+================================================================================
+BAGIAN 4: SCORING & KEPUTUSAN AKHIR
+================================================================================
+
+SCORING RUBRIC (Skor Aktual — Terverifikasi 11 Mei 2026):
+┌──────────────────────────────────────────┬───────┬───────┬──────────────────────────┐
+│ Komponen                                 │ Bobot │ Skor  │ Keterangan               │
+├──────────────────────────────────────────┼───────┼───────┼──────────────────────────┤
+│ 1A. L1 Backtest Accuracy                 │  15   │  15   │ MAPE 3.4%                │
+│ 1B. L1 Forward Test (2026)               │  15   │  10   │ MAPE < 5%                │
+│ 1C. Overfitting Check                    │   5   │   3   │ Gap 2.71pp               │
+│ 1D. Skill vs Baseline                    │  10   │  10   │ > 20%                    │
+│ 2A. Shift KPI Scorecard                  │  15   │  10   │ Jan 7/8, Feb 6/8         │
+│ 2B. Daily Error Profile                  │  10   │  10   │ WAPE 3.99% (EXCELLENT)   │
+│ 2C. DOW Profile Accuracy                 │   5   │   5   │ 0.63pp max               │
+│ 2D. Event Handling                       │   5   │   5   │ 89.5% Acc (EXCELLENT)    │
+│ 3A. Error Propagation Analysis           │   5   │   5   │ Documented               │
+│ 3B. Production Readiness                 │  10   │   6   │ 1 Fail (Rounding)        │
+│ 3C. Business Value                       │   5   │   5   │ ROI 24.3%                │
+├──────────────────────────────────────────┼───────┼───────┼──────────────────────────┤
+│ TOTAL SKOR                               │ 100   │  84   │                          │
+└──────────────────────────────────────────┴───────┴───────┴──────────────────────────┘
+
+  CATATAN PERUBAHAN SKOR DARI VERSI SEBELUMNYA:
+    2B: 7/10 → 10/10 (+3) — WAPE turun dari 10.6% ke 3.99% setelah Smart Event Classifier
+    2D: 5/5  → 5/5   (konfirmasi) — Event accuracy 89.5% > 85% threshold EXCELLENT
+    Skor sebelumnya (81) menggunakan WAPE lama (10.6%) dari output pre-v2.2.
+
+KEPUTUSAN:
+  >= 80 poin  → GO (layak deploy)
+  60-79 poin  → CONDITIONAL GO (deploy dengan monitoring ketat)
+  < 60 poin   → NO-GO (perlu perbaikan signifikan)
+
+HASIL KEPUTUSAN: GO ✅ (Total Skor 84)
+
+================================================================================
+BAGIAN 5: DETAIL LAPORAN EVALUASI
+================================================================================
+
+---
+1. EXECUTIVE SUMMARY
+---
+- Skor Total: 84 / 100
+- Keputusan : GO ✅ (Layak deploy ke Production)
+- Temuan Utama:
+  • Akurasi Layer 1 (XGBoost) superior (MAPE 3.4%) dan nyaris tidak menyumbang 
+    error propagasi ke level harian.
+  • Layer 2 v2.2 (Smart Event Classifier) berhasil menurunkan WAPE harian dari 
+    10.6% menjadi 3.99%, dan menaikkan Event Accuracy dari 52.6% menjadi 89.5%.
+  • Distribusi ke 8 shift stabil: Jan 7/8, Feb 6/8 shift dengan error <10%.
+    Service Level 87.5%.
+  • Sistem memberikan nilai efisiensi inventori sebesar Rp87.195.500 
+    (Cost Reduction 24.3%) selama 1.5 bulan evaluasi pertama.
+  • Tidak ditemukan data leakage maupun cacat logika fatal 
+    (diverifikasi oleh audit independen 11 Mei 2026).
+
+---
+2. LAYER 1 RESULTS
+---
+- MAPE backtest    : 3.40%
+- MAPE forward     : Jan (1.3%) | Feb (4.9%)
+- Skill score      : >60%
+- Overfitting gap  : 2.71pp (Train 0.69% vs Test 3.40%)
+- Per-varian detail: 
+  Coklat & Moca cenderung over-predict, Original & Strawberry cenderung 
+  under-predict. Keduanya saling mengkompensasi dan menyeimbangkan agregat 
+  di level total bulan.
+
+---
+3. LAYER 2 RESULTS
+---
+- Shift < 10% error: Jan 2026 (7/8 shift) | Feb 2026 (6/8 shift)
+- Total error      : Jan 2026 (-5.3%) | Feb 2026 (-0.3%)
+- Daily Error(WAPE): 3.99% (EXCELLENT — threshold <10%)
+- Daily Error(MADE): 6.19% (secondary metric, referensi saja)
+- DOW share error  : 0.63pp max (Selisih share per hari sangat kecil)
+- Event Handling   : 89.5% akurasi (17/19 event days dengan |error| <20%)
+    Perbaikan kunci (Smart Event Classifier v2.2):
+    • 2 Jan (Cuti Bersama): error +73.8% → -5.2% 
+    • 3 Jan (Sabtu post-shutdown): error +195% → -2.3%
+    • Holiday accuracy: 0% → 100% (3/3 holiday days)
+    • Weekend accuracy: 64.3% → 92.9% (13/14 weekend days)
+
+---
+4. END-TO-END RESULTS
+---
+- Error decomposition  : Layer 1 = -2.2% | Layer 2 = 102.2% 
+- Production readiness : 21 PASS | 3 WARN | 1 FAIL 
+    (Fail hanya berupa rounding artifact kecil pada target Maret 
+     sebanyak 69 unit)
+- Business value       : Estimasi penghematan Inventory sebesar Rp87,1 Juta.
+
+---
+5. RISKS & LIMITATIONS
+---
+- Shift-shift volume kecil (<2% total demand: SHIFT3-AWAL, SHIFTPUTIH-AWAL/AKHIR) 
+  memiliki error% yang secara inheren lebih tinggi karena denominator kecil. 
+  Ini adalah batas alam, bukan bug sistem.
+- Varian level prediction (Layer 1 per varian) masih menyisakan error 15-18% 
+  per produk akibat perilaku stochastic dari konsumen. Ini batas alam Layer 1 
+  yang tidak bisa diperbaiki oleh Layer 2.
+- Sunday pre-Ramadan masih sedikit under-predict (~15%) karena tren naik yang 
+  hanya memiliki 3 data point historis. Akan membaik otomatis seiring 
+  bertambahnya data (sistem self-correcting).
+
+---
+6. RECOMMENDATIONS
+---
+- Melakukan pemantauan dan updating rutin parameter RAMADAN_START_MONTHS 
+  untuk beradaptasi terhadap pergerakan maju bulan puasa di setiap tahun barunya.
+- Setelah data 2026 penuh tersedia, lakukan retraining Layer 1 untuk menangkap 
+  pola recovery pasca-Ramadan yang lebih baru.
+- Eksperimen ML untuk Layer 2 telah dilakukan dan DITOLAK (Prophet WAPE 27% vs 
+  Rule-Based 10.6%). Pendekatan Rule-Based + Smart Event Classifier tetap 
+  menjadi arsitektur optimal untuk distribusi harian.
+- Pantau WAPE dan Event Accuracy secara berkala setiap kuartal untuk memastikan 
+  sistem tidak degradasi seiring waktu.
+
+================================================================================
+Dibuat oleh  : AI Assistant bersama pengguna
+Terakhir update: 11 Mei 2026 (Sinkronisasi skor setelah audit independen)
+================================================================================

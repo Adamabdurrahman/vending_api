@@ -1,0 +1,9 @@
+venv/
+__pycache__/
+*.pyc
+.env
+scratch_*.py
+scratch_*.txt
+*.log
+error_log.txt
+retrain_log.txt
