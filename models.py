@@ -15,6 +15,9 @@ class User(Base):
     nohp = Column(String(20), nullable=False)
     register_time = Column(DateTime, nullable=True)
     update_time = Column(DateTime, nullable=True)
-    approve_by = Column(String(10), nullable=True)
+    approve_by = Column(String(100), nullable=True)
     status_active = Column(String(1), nullable=False)
     photo_url = Column(String(255), nullable=True)
+    security_token = Column(String(100), nullable=True)
+    token_expiry = Column(DateTime, nullable=True)
+

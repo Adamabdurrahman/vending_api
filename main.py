@@ -17,6 +17,11 @@ from sqlalchemy.orm import Session
 
 import etl_service
 import forecast_service
+import dashboard_service
+import calendar_service
+import manual_insert_service
+import retrain_log_service
+import user_auth_service
 
 # Import dari file lokal
 import models
@@ -57,9 +62,27 @@ def login(request: schemas.LoginRequest, db: Session = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Password salah"
         )
 
-    # Validasi status_active (contoh jika 'Y' berarti aktif, bisa disesuaikan '1' atau 'A')
-    # if user.status_active != 'Y':
-    #     raise HTTPException(status_code=403, detail="User tidak aktif")
+    # Validasi status_active
+    if user.status_active != '1':
+        if user.status_active == 'P':
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail="Akun Anda masih pending persetujuan Superadmin"
+            )
+        elif user.status_active == 'T':
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail={
+                    "error_code": "PENDING_OTP",
+                    "message": "Akun Anda menunggu verifikasi token email",
+                    "user_id": user.Id
+                }
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail="Akun Anda tidak aktif atau dinonaktifkan"
+            )
 
     # Jika sukses
     # return custom map since DB fields are Capitalized and Schema fields might differ
@@ -73,6 +96,7 @@ def login(request: schemas.LoginRequest, db: Session = Depends(get_db)):
         "status_active": user.status_active,
         "photo_url": photo_url,
     }
+
 
 
 # ========================================================
@@ -381,3 +405,178 @@ def api_mark_all_read():
             text("UPDATE dbo.SystemNotifications SET IsRead = 1 WHERE IsRead = 0")
         )
     return {"status": "success", "marked_read": result.rowcount}
+
+
+# ========================================================
+# KUMPULAN ENDPOINT DASHBOARD SUMMARY (GROUP: DASHBOARD)
+# ========================================================
+
+@app.get("/api/v1/dashboard/metrics", tags=["Dashboard Summary"])
+def api_dashboard_metrics(start_date: str, end_date: str, shift_id: str = "ALL", db: Session = Depends(get_db)):
+    return dashboard_service.get_metrics_data(db, start_date, end_date, shift_id)
+
+@app.get("/api/v1/dashboard/consumption-chart", tags=["Dashboard Summary"])
+def api_consumption_chart(start_date: str, end_date: str, shift_id: str = "ALL", db: Session = Depends(get_db)):
+    return dashboard_service.get_consumption_chart(db, start_date, end_date, shift_id)
+
+@app.get("/api/v1/dashboard/sales-analytics", tags=["Dashboard Summary"])
+def api_sales_analytics(start_date: str, end_date: str, shift_id: str = "ALL", db: Session = Depends(get_db)):
+    return dashboard_service.get_sales_analytics(db, start_date, end_date, shift_id)
+
+@app.get("/api/v1/dashboard/latest-transactions", tags=["Dashboard Summary"])
+def api_latest_transactions(start_date: str, end_date: str, shift_id: str = "ALL", db: Session = Depends(get_db)):
+    return dashboard_service.get_latest_transactions(db, start_date, end_date, shift_id)
+
+
+# ========================================================
+# KUMPULAN ENDPOINT PREDICTION DASHBOARD (GROUP: PREDICTION)
+# ========================================================
+
+@app.get("/api/v1/prediction/summary", tags=["Prediction Dashboard"])
+def api_prediction_summary(year: int = 2026, quarter: int = 1, db: Session = Depends(get_db)):
+    return dashboard_service.get_prediction_summary(db, year, quarter)
+
+@app.get("/api/v1/prediction/variant-errors", tags=["Prediction Dashboard"])
+def api_variant_errors(year: int = 2026, quarter: int = 1, db: Session = Depends(get_db)):
+    return dashboard_service.get_variant_errors(db, year, quarter)
+
+@app.get("/api/v1/prediction/shift-errors", tags=["Prediction Dashboard"])
+def api_shift_errors(year: int = 2026, quarter: int = 1, db: Session = Depends(get_db)):
+    return dashboard_service.get_shift_errors(db, year, quarter)
+
+@app.get("/api/v1/prediction/daily-logs", tags=["Prediction Dashboard"])
+def api_daily_logs(year: int = 2026, quarter: int = 1, db: Session = Depends(get_db)):
+    return dashboard_service.get_daily_logs(db, year, quarter)
+
+@app.get("/api/v1/prediction/chart-data", tags=["Prediction Dashboard"])
+def api_prediction_chart_data(year: int = 2026, quarter: int = 1, db: Session = Depends(get_db)):
+    return dashboard_service.get_chart_data(db, year, quarter)
+
+
+# ========================================================
+# KUMPULAN ENDPOINT OPERATIONAL CALENDAR (GROUP: CALENDAR)
+# ========================================================
+
+@app.get("/api/v1/calendar", tags=["Calendar"])
+def api_get_calendar(year: int = 2026, db: Session = Depends(get_db)):
+    return calendar_service.get_calendar_year_data(db, year)
+
+class CalendarDayUpdate(BaseModel):
+    date: str
+    day_category: str
+    is_working_day: bool
+    is_ramadan: bool
+    is_shutdown: bool
+
+@app.post("/api/v1/calendar/day", tags=["Calendar"])
+def api_update_calendar_day(req: CalendarDayUpdate, db: Session = Depends(get_db)):
+    return calendar_service.update_calendar_day(
+        db, req.date, req.day_category, req.is_working_day, req.is_ramadan, req.is_shutdown
+    )
+
+class CalendarYearGenerate(BaseModel):
+    year: int
+
+@app.post("/api/v1/calendar/generate", tags=["Calendar"])
+def api_generate_calendar_year(req: CalendarYearGenerate, db: Session = Depends(get_db)):
+    try:
+        return calendar_service.generate_calendar_year(db, req.year)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.delete("/api/v1/calendar/year/{year}", tags=["Calendar"])
+def api_delete_calendar_year(year: int, db: Session = Depends(get_db)):
+    return calendar_service.delete_calendar_year(db, year)
+
+
+# ========================================================
+# KUMPULAN ENDPOINT MANUAL INSERT (GROUP: MANUAL INSERT)
+# ========================================================
+
+from fastapi.responses import FileResponse
+
+@app.get("/api/v1/manual-insert/template", tags=["Manual Insert"])
+def api_download_template():
+    manual_insert_service.ensure_template_exists()
+    if not os.path.exists(manual_insert_service.TEMPLATE_PATH):
+        raise HTTPException(status_code=404, detail="File template tidak ditemukan")
+    return FileResponse(manual_insert_service.TEMPLATE_PATH, filename="Template_Insert.xlsx")
+
+@app.post("/api/v1/manual-insert/upload", tags=["Manual Insert"])
+async def api_upload_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    contents = await file.read()
+    return manual_insert_service.process_excel_upload(db, contents, file.filename)
+
+
+# ========================================================
+# KUMPULAN ENDPOINT RETRAIN LOGS (GROUP: RETRAIN LOGS)
+# ========================================================
+
+@app.get("/api/v1/retrain/logs", tags=["Retrain Logs"])
+def api_get_retrain_logs(limit: int = 100, offset: int = 0, db: Session = Depends(get_db)):
+    return retrain_log_service.get_retrain_logs_data(db, limit, offset)
+
+
+# ========================================================
+# KUMPULAN ENDPOINT AUTENTIKASI & USER MANAGEMENT (NEW)
+# ========================================================
+
+@app.post("/api/v1/auth/register", tags=["Autentikasi & User Management"], status_code=201)
+def api_register_user(req: schemas.RegisterRequest, db: Session = Depends(get_db)):
+    try:
+        return user_auth_service.register_user(db, req)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+@app.get("/api/v1/admin/pending-users", tags=["Autentikasi & User Management"], response_model=list[schemas.PendingUserResponse])
+def api_get_pending_users(db: Session = Depends(get_db)):
+    return user_auth_service.get_pending_users(db)
+
+@app.post("/api/v1/admin/approve-user", tags=["Autentikasi & User Management"])
+def api_approve_user(req: schemas.ApproveUserRequest, db: Session = Depends(get_db)):
+    try:
+        return user_auth_service.approve_user(db, req.target_user_id, req.admin_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+@app.post("/api/v1/auth/verify-token", tags=["Autentikasi & User Management"])
+def api_verify_user_token(req: schemas.VerifyTokenRequest, db: Session = Depends(get_db)):
+    try:
+        return user_auth_service.verify_user_token(db, req.user_id, req.token)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+@app.post("/api/v1/auth/reset-password/request", tags=["Autentikasi & User Management"])
+def api_request_reset_password(req: schemas.ResetPasswordRequest, db: Session = Depends(get_db)):
+    try:
+        return user_auth_service.request_reset_password(db, req.username, req.email)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+@app.post("/api/v1/auth/reset-password/confirm", tags=["Autentikasi & User Management"])
+def api_confirm_reset_password(req: schemas.ResetPasswordConfirmRequest, db: Session = Depends(get_db)):
+    try:
+        return user_auth_service.confirm_reset_password(db, req.user_id, req.token, req.new_password)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+@app.get("/api/v1/admin/users", tags=["Autentikasi & User Management"], response_model=list[schemas.UserManagementResponse])
+def api_get_all_users(db: Session = Depends(get_db)):
+    return user_auth_service.get_all_users(db)
+
+@app.put("/api/v1/admin/users/{userId}/update-role-password", tags=["Autentikasi & User Management"])
+def api_admin_update_user(userId: str, req: schemas.AdminUpdateUserRequest, db: Session = Depends(get_db)):
+    try:
+        return user_auth_service.admin_update_user(db, userId, req.level_user, req.new_password)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+@app.delete("/api/v1/admin/users/{userId}", tags=["Autentikasi & User Management"])
+def api_admin_reject_user(userId: str, db: Session = Depends(get_db)):
+    try:
+        return user_auth_service.admin_reject_user(db, userId)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+

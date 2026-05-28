@@ -1,0 +1,76 @@
+
+============================================================
+DATE: 2026-05-28 17:14:11
+TO: test_1779963250@gmail.com
+SUBJECT: Token Keamanan Aktivasi Akun Anda
+------------------------------------------------------------
+Halo test_user_1779963250,
+
+Pendaftaran akun Anda telah DISETUJUI oleh Superadmin (superadmin_01).
+
+Berikut adalah 6-digit token keamanan Anda untuk mengaktifkan akun:
+👉 697374 👈
+
+Token ini berlaku selama 15 menit. Silakan masukkan token ini di halaman verifikasi aplikasi Android Anda.
+
+Salam,
+Sistem Vending Machine Capstone
+============================================================
+
+============================================================
+DATE: 2026-05-28 17:14:11
+TO: test_1779963250@gmail.com
+SUBJECT: Permintaan Reset Password Anda
+------------------------------------------------------------
+Halo test_user_1779963250,
+
+Kami menerima permintaan untuk mereset password akun Anda.
+
+Berikut adalah 6-digit OTP reset password Anda:
+👉 462024 👈
+
+OTP ini berlaku selama 15 menit. Masukkan OTP ini di halaman reset password aplikasi Android untuk membuat password baru.
+
+Jika Anda tidak merasa melakukan permintaan ini, abaikan email ini.
+
+Salam,
+Sistem Vending Machine Capstone
+============================================================
+
+============================================================
+DATE: 2026-05-28 17:22:28
+TO: test_1779963748@gmail.com
+SUBJECT: Token Keamanan Aktivasi Akun Anda
+------------------------------------------------------------
+Halo test_user_1779963748,
+
+Pendaftaran akun Anda telah DISETUJUI oleh Superadmin (superadmin_01).
+
+Berikut adalah 6-digit token keamanan Anda untuk mengaktifkan akun:
+👉 296431 👈
+
+Token ini berlaku selama 15 menit. Silakan masukkan token ini di halaman verifikasi aplikasi Android Anda.
+
+Salam,
+Sistem Vending Machine Capstone
+============================================================
+
+============================================================
+DATE: 2026-05-28 17:22:28
+TO: test_1779963748@gmail.com
+SUBJECT: Permintaan Reset Password Anda
+------------------------------------------------------------
+Halo test_user_1779963748,
+
+Kami menerima permintaan untuk mereset password akun Anda.
+
+Berikut adalah 6-digit OTP reset password Anda:
+👉 812694 👈
+
+OTP ini berlaku selama 15 menit. Masukkan OTP ini di halaman reset password aplikasi Android untuk membuat password baru.
+
+Jika Anda tidak merasa melakukan permintaan ini, abaikan email ini.
+
+Salam,
+Sistem Vending Machine Capstone
+============================================================

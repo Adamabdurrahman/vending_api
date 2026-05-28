@@ -1,0 +1,703 @@
+﻿
+===== HALAMAN 8 =====
+  
+ 
+1 
+ PART 3: DESIGN 
+ 
+A. SYSTEM DESIGN 
+ 
+Figure 1.1 ÔÇô Diagram Architecture  
+ 
+1. System Architecture Overview 
+The developed system utilizes a Client-Server architecture designed to integrate Internet of 
+Things (IoT) transaction logs, a mobile-based Enterprise Resource Planning (ERP) 
+interface, and a Supervised Machine Learning engine. The architecture ensures that 
+General Affairs (GA) staff can monitor milk inventory in real-time and make data-driven 
+procurement decisions based on 3-month demand forecasting. 
+ 
+The system architecture consists of five primary components: 
+´éÀ Data Source (IoT Node):  The milk vending machines act as the primary data 
+generators. Every dispense event (including timestamp, RFID, milk flavor, and slot 
+number) is recorded as raw transaction logs. 
+´éÀ Client Tier (Mobile Application):  A native Android application developed using 
+Java. This serves as the primary user interface for GA Staff (to view operational 
+dashboards, analyze forecasts, and create procurement plans) and IT Admins (to 
+manage master data and configure user access). 
+´éÀ Application/API Tier (Backend):  A Python-based REST API acts as the secure 
+intermediary between the mobile application and the database. It handles data 
+aggregation, business logic validation, and request routing. 
+´éÀ Analytical/ML Tier:  A dedicated Python Machine Learning engine. It processes 
+historical transaction data pulled from the database, runs the supervised learning 
+algorithms, and returns total and flavor-level demand forecasts for the next three 
+months. 
+´éÀ Data Storage Tier:  Microsoft SQL Server is used as the centralized relational 
+database. It securely stores master data (employees, vending machines, milk 
+variants), aggregated transaction logs, forecast outputs, and finalized procurement 
+decision records. 
+Page 8 of 21 - Integrity Submission
+Submission ID
+trn:oid:::1:3524552941
+Page 8 of 21 - Integrity Submission
+Submission ID
+trn:oid:::1:3524552941
+
+
+===== HALAMAN 9 =====
+  
+ 
+2 
+ 2. Connection and Data Flow 
+´éÀ Raw logs are extracted from the vending machine and imported into the SQL Server 
+database. 
+´éÀ A System Scheduler (e.g., Cron Job) automatically triggers the Machine Learning 
+Engine on a predefined schedule (e.g., the 1st of every month). The ML engine 
+queries historical consumption data from the database, processes the predictions, 
+calculates performance metrics (e.g., MAE, MAPE), and securely stores the 
+generated forecast results back into the SQL Server database. 
+´éÀ The Android Application sends an HTTP request to the Python REST API when a 
+user accesses the dashboard or views the 3-month forecast menu. 
+´éÀ The API retrieves these pre-calculated prediction results from the database, formats 
+them into standard JSON format, and transmits them back to the Android 
+application to be rendered as interactive visual charts. 
+´éÀ Once the GA Staff reviews and approves a draft procurement plan, the decision 
+record is routed back through the API and permanently committed to the SQL 
+Server as an official ERP operational record. 
+ 
+3. User Interface Mock-ups 
+   
+Figure 1.2 ÔÇô Login Screen:  Interface for 
+secure user authentication with role-based 
+access control.  
+  Figure 1.3 ÔÇô Main Dashboard: Real-
+time visualization of current stock levels, 
+daily consumption trends, and shift-
+based usage.  
+ 
+ 
+Page 9 of 21 - Integrity Submission
+Submission ID
+trn:oid:::1:3524552941
+Page 9 of 21 - Integrity Submission
+Submission ID
+trn:oid:::1:3524552941
+
+
+===== HALAMAN 10 =====
+  
+ 
+3 
+  
+ 
+  
+ 
+Figure 1.4 ÔÇô Forecast Module: Displays the 
+supervised machine learning prediction 
+charts, flavor-level breakdown, and forecast 
+accuracy metrics.  
+  Figure 1.5 ÔÇô Procurement Planning: The 
+auto-generated ERP decision-support form 
+recommending order quantities based on the 
+forecasted demand.  
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+Page 10 of 21 - Integrity Submission
+Submission ID
+trn:oid:::1:3524552941
+Page 10 of 21 - Integrity Submission
+Submission ID
+trn:oid:::1:3524552941
+
+
+===== HALAMAN 11 =====
+  
+ 
+4 
+ B. HIERARCHICAL/ITERATIVE DESIGN 
+ 
+This section details the system's architecture from the highest level of user interaction down to 
+the primitive software functions, utilizing standard UML modeling and defining the interfaces 
+between each component. 
+ 
+1. System Modeling (Highest to Lowest Level) 
+a. Highest Level:  At the highest design level, the system architecture is mapped 
+through a Use Case Diagram (Figure 2.1) which illustrates the system boundaries 
+and interactions of the main actors, namely GA Staff and IT Admin. As has been 
+analyzed in detail in the previous document, this diagram summarizes the main 
+operational functions of the application, ranging from dashboard monitoring, 
+executing Machine Learning predictions for the next 3 months, to the process of 
+creating and storing the Procurement Plan into the ERP system. 
+ 
+ 
+Figure 2.1  - Use Case Diagram:  Defines the boundaries of the system and the authorized 
+actions for each role, such as viewing forecasts, managing master data, and validating 
+procurement plans. 
+ 
+Although the Use Case Diagram provides an overall view of 'what' the system and 
+users can do, this diagram does not explain the logic sequence behind the scenes. 
+Therefore, to understand 'how' these main operational functions are executed 
+chronologically step by step, this high-level interaction will be broken down and 
+derived to the mid-level through the elaboration of the Activity Diagram in the 
+following section. 
+ 
+ 
+Page 11 of 21 - Integrity Submission
+Submission ID
+trn:oid:::1:3524552941
+Page 11 of 21 - Integrity Submission
+Submission ID
+trn:oid:::1:3524552941
+
+
+===== HALAMAN 12 =====
+  
+ 
+5 
+ b. Mid-Level:  Moving down one level (Mid-Level), the system's architecture is first 
+mapped through a Context Diagram (Figure 2.2) to establish the overarching data 
+flow between the external entities (GA Staff, IT Admin, and the Vending Machine) 
+and the core ERP system. This diagram serves as a crucial bridge, illustrating the 
+high-level input-output relationships before the system is decomposed into specific 
+operational steps. 
+ 
+ 
+Figure 2.2 - Context Diagram of the Systems 
+ 
+From this generalized data flow, the system's operational logic is further detailed 
+into specific business workflows using Activity Diagrams. The first crucial process 
+elaborated is the Machine Learning forecasting execution (Figure 2.3). This 
+diagram highlights the step-by-step validation of historical data adequacy, detailing 
+how the system handles sufficient versus insufficient transaction logs before the 
+algorithm computation is performed. 
+ 
+ 
+Figure 2.3  ÔÇô Machine Learning Forecasting Activity 
+ 
+ 
+Page 12 of 21 - Integrity Submission
+Submission ID
+trn:oid:::1:3524552941
+Page 12 of 21 - Integrity Submission
+Submission ID
+trn:oid:::1:3524552941
+
+
+===== HALAMAN 13 =====
+  
+ 
+6 
+  
+Once the automated forecasting process generates a prediction, the workflow 
+transitions into the ERP decision-making phase. Figure 2.4 details the 
+Procurement Validation Activity, where the ML prediction results are translated 
+into a draft procurement plan. This workflow illustrates how the GA Staff can 
+validate, adjust, and permanently store the finalized plan, effectively 
+transforming automated machine learning predictions into structured managerial 
+actions. 
+ 
+Figure 2.4  - Procurement Validation Activity 
+ 
+While these Activity Diagrams have successfully mapped the business workflow 
+logic comprehensively, they do not yet show how the software modules 
+communicate with each other technically from second to second. To observe the 
+precise details of data exchange, API calls, and background script executions 
+chronologically, the system design is further broken down to its lowest level 
+through a Sequence Diagram in the following section. 
+ 
+ 
+c. Lowest Level:  Primitive Software Functions (Sequence Diagram). At the lowest 
+design level, system operations are broken down into primitive software functions 
+that focus on technical interactions between components. Through the Sequence 
+Diagram (Figure 2.4), it is mapped precisely how the System Scheduler 
+automatically triggers the Machine Learning Engine in the background to process 
+data from the SQL Database, as well as how the Android App and Python REST 
+API exchange messages via the HTTP protocol when GA Staff access the interface. 
+This diagram validates the separation of heavy computational load from application 
+response time, ensuring the system's performance remains optimal. 
+ 
+Page 13 of 21 - Integrity Submission
+Submission ID
+trn:oid:::1:3524552941
+Page 13 of 21 - Integrity Submission
+Submission ID
+trn:oid:::1:3524552941
+
+
+===== HALAMAN 14 =====
+  
+ 
+7 
+  
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+Figure 2.5  - System Sequence Diagram 
+ 
+ 
+Considering the complexity of message exchanges and parameters between 
+application tiers depicted in the Sequence Diagram, a robust communication 
+protocol and data storage foundation are required so that the system can be 
+integrated seamlessly. Therefore, the following section will specifically define the 
+interface mechanism (Interface Information) that bridges these components, as well 
+as present the database architecture (Data Structure Modeling) which serves as the 
+main pillar of system storage.  
+Page 14 of 21 - Integrity Submission
+Submission ID
+trn:oid:::1:3524552941
+Page 14 of 21 - Integrity Submission
+Submission ID
+trn:oid:::1:3524552941
+
+
+===== HALAMAN 15 =====
+  
+ 
+8 
+  
+2. Interface Information Between Block Diagrams 
+To ensure seamless communication across the Client, API, and Database tiers, the system 
+utilizes specific interface mechanisms: 
+´éÀ Message Passing (Client to Server):  The Android mobile application 
+communicates with the Python Backend over the network using HTTP REST API 
+protocols. Requests are sent via HTTP GET/POST methods, and the server 
+responds by passing messages formatted in standard JSON strings. For example, 
+when requesting the 3-month forecast, the Android app sends an HTTP GET 
+request to the /api/forecast endpoint, and the Python server returns a JSON payload 
+such as: 
+{"status": "success", "flavor_predictions": {"Murni": 4200, "Coklat": 3525, 
+"Strawberry": 2560}}. 
+´éÀ Parameter Passing (Internal Backend):  Within the Python Backend, data is 
+exchanged between modules using strict parameter passing to maintain function 
+isolation. For instance, when the System Scheduler triggers the ML forecasting 
+script, it passes specific execution parameters to define the prediction scope (e.g., 
+calling the function def run_forecast(target_month, execution_date, 
+historical_limit)) to the Python processing functions. 
+´éÀ Database Interfacing:  The Python backend (both the REST API and the ML 
+Engine) connects to the Microsoft SQL Server using standard connection strings 
+and executes parameterized SQL queries to ensure security against SQL injection. 
+Specifically, the ML Engine securely reads historical logs by querying the 
+monitor_log_datatransaksi table and writes forecast outputs, while the API reads 
+these forecasts and writes the finalized ERP procurement decision records into the 
+database. 
+ 
+ 
+3. Component References and Libraries Used 
+The system is built upon off-the-shelf components and standard libraries to ensure stability 
+and maintainability: 
+´éÀ Mobile Interface (Java/Android SDK): MPAndroidChart 
+´éÀ Backend & API (Python): pyodbc, Flask / FastAPI, APIScheduler 
+´éÀ Machine Learning Engine (Python): pandas, scikit-learn, statsmodels, numpy, 
+SimpleImputer, StandardScaler, TimeSeriesSplit, GridSearchCV, 
+mean_absolute_error, mean_absolute_percentage_error, matplotlib       
+ 
+ 
+ 
+ 
+ 
+ 
+Page 15 of 21 - Integrity Submission
+Submission ID
+trn:oid:::1:3524552941
+Page 15 of 21 - Integrity Submission
+Submission ID
+trn:oid:::1:3524552941
+
+
+===== HALAMAN 16 =====
+  
+ 
+9 
+  
+4. Data Structure Modeling (Entity Relationship Diagram) 
+Data architecture is a fundamental pillar that supports all system operations, from recording 
+raw transaction logs to storing managerial decisions in the ERP module. At this design 
+stage, all relational database schemas are modeled through an Entity Relationship Diagram 
+(ERD) to define an organized storage structure in Microsoft SQL Server 2012. This ERD 
+not only maps tables but also establishes data integrity rules through Primary Keys and 
+Foreign Keys, ensuring that the data used by the Machine Learning prediction engine is 
+consistent, valid, and traceable over time. 
+ 
+ 
+ 
+ 
+Figure 3.1, ERD diagram Database 
+ 
+  
+Page 16 of 21 - Integrity Submission
+Submission ID
+trn:oid:::1:3524552941
+Page 16 of 21 - Integrity Submission
+Submission ID
+trn:oid:::1:3524552941
+
+
+===== HALAMAN 17 =====
+  
+ 
+10 
+ C. STANDARDS USED  
+ 
+Category Standard Name / Version  Application in the System 
+Architectural 
+Style REST (Representational 
+State Transfer) The standard architectural pattern used for 
+building the Python Backend API to 
+communicate with the Android application.  
+Data Exchange 
+Format JSON (JavaScript Object 
+Notation) The standard data format used for all HTTP 
+request payloads and API responses between 
+the Android client and the Python server.  
+System 
+Modeling UML 2.0 (Unified 
+Modeling Language) The standard used for designing system 
+blueprints, including Use Case Diagrams, 
+Activity Diagrams, and Sequence Diagrams.  
+Database 
+Standard ANSI SQL The standard query language used to interact 
+with the Microsoft SQL Server 2012 database 
+for CRUD operations and data aggregation.  
+Time & Date 
+Format ISO 8601 (YYYY-MM- DD 
+HH:MM:SS) The standard datetime format used to record 
+transaction logs from the dataset and to 
+schedule the automated ML forecasting.  
+Code 
+Formatting PEP 8 The official style guide for Python code, 
+applied to ensure readability and 
+maintainability in the Backend API and 
+Machine Learning scripts.  
+Network 
+Protocol HTTP / HTTPS The standard application- layer protocol used 
+for data transmission over the internal network.  
+ML Evaluation 
+Standard MAE & MAPE The standard mathematical metrics (Mean 
+Absolute Error & Mean Absolute Percentage 
+Error) used to evaluate and validate the 
+accuracy of the 3- month demand forecast 
+model. 
+  3
+4
+5
+6
+Page 17 of 21 - Integrity Submission
+Submission ID
+trn:oid:::1:3524552941
+Page 17 of 21 - Integrity Submission
+Submission ID
+trn:oid:::1:3524552941
+
+
+===== HALAMAN 18 =====
+  
+ 
+11 
+ D. IMPLEMENTATION AND TESTING SCENARIO 
+ 
+The system is implemented as an ERP-based Decision Support System integrated with a 
+Supervised Machine Learning module, using a client-server architecture consisting of a mobile 
+application, backend API, machine learning engine, and centralized database. 
+ 
+1. End-to-End System Workflow & Implementation Flow 
+The system operates through an integrated pipeline, covering processes from data 
+acquisition to decision-making, as follows: 
+a. Data Acquisition Layer (IoT Layer): Vending machines automatically generate 
+transaction logs for each milk dispensing activity. The collected data includes a 
+timestamp, machine ID, slot number, flavor, and quantity. These logs are 
+periodically transmitted and stored in a SQL Server database, ensuring both real-
+time and historical data availability for analysis. 
+b. Data Prepocessing and Validation Layer (Backend Layer): The backend API 
+performs data cleaning and validation to ensure data quality, including:  
+- Removing duplicate and failed transactions  
+- Handling missing values and inconsistencies  
+- Validating slot-to-flavor mapping using master data  
+c. Data Aggregation and Feature Engineering Layer 
+Transaction data is transformed into time-series datasets (daily or weekly), followed 
+by feature engineering, such as: Lag consumption, Moving averages, Shift-based 
+indicators, and Seasonality factors. These features enhance the modelÔÇÖs ability to 
+capture temporal patterns and consumption trends. 
+d. Machine Learning Forecasting Layer (Analytical Layer): Supervised machine 
+learning models are used to generate demand forecasts, including: 3 month demand 
+predictions, Flavor level demand breakdown, Model performance evaluation using 
+metrics such as MAE and MAPE. 
+e. API Communication Layer: Communication between the mobile application and 
+backend system is handled via REST APIs using JSON format.  
+This ensures: Structured data exchange, Secure communication, and Real-time 
+system responsiveness. The API can both retrieve processed data and trigger 
+forecasting processes. 2
+2
+Page 18 of 21 - Integrity Submission
+Submission ID
+trn:oid:::1:3524552941
+Page 18 of 21 - Integrity Submission
+Submission ID
+trn:oid:::1:3524552941
+
+
+===== HALAMAN 19 =====
+  
+ 
+12 
+ f. Presentation Layer (Mobile Application) : The Android application serves as the 
+main user interface, providing: 
+- Login (Authentication & RBAC)  
+- Dashboard (consumption and stock trend monitoring)  
+- Forecast Module (prediction visualization)  
+- Procurement Planning (decision support form) 
+g. Decision Support Layer: The system automatically generates a draft procurement 
+plan based on forecast results. However, final decision making remains with the 
+user (GA Staff), who can: Review, Modify, Confirm the plan (RMC). This approach 
+follows Decision Support System (DSS) principles, where technology supports 
+rather than replaces human decisions. Final decisions are stored in the ERP system. 
+h. Security Implementation:  System security is implemented through: 
+- Role-Based Access Control (RBAC):  
+1. GA Staff ÔåÆ limited access  
+2. IT Admin ÔåÆ full system control  
+- Anonymization of sensitive employee data in all visual outputs. 
+ 
+2. Testing Scenarios 
+A. Authentication and Access Control 
+No.  Feature Scenario Steps Expected 
+Result Error 
+Handling 
+1.  Login Valid login User inputs 
+correct username 
+& password ÔåÆ 
+click login  User 
+successfully 
+enters 
+dashboard  -  
+2.  Login Wrong 
+password Input correct 
+username + wrong 
+password Access denied System 
+displays: 
+"Incorrect 
+password"  
+3.  Login Unregistered 
+user Input unknown 
+username Access denied System 
+displays: "User 
+not found  
+4.  Login Empty fields User submits 
+empty form Login blocked System 
+displays: 
+"Field cannot 
+be empty"  
+5.  Access 
+Control Role 
+restriction GA accesses 
+admin menu Access denied System 
+displays: 
+"Unauthorized 
+access" 
+Page 19 of 21 - Integrity Submission
+Submission ID
+trn:oid:::1:3524552941
+Page 19 of 21 - Integrity Submission
+Submission ID
+trn:oid:::1:3524552941
+
+
+===== HALAMAN 20 =====
+  
+ 
+13 
+  
+B. Dashboard Monitoring (Main UI) 
+No.  Feature Scenario Steps Expected 
+Result Alternative / Error 
+Handling 
+1.  Dashboard Load 
+dashboard User opens 
+dashboard Charts 
+displayed 
+(daily, 
+monthly, shift)  If no data ÔåÆ show 
+"No data available" 
+2.  Dashboard Filter data Apply 
+date/shift 
+filter Data updates 
+dynamically Invalid filter ÔåÆ 
+reset automatically 
+3.  Dashboard High data 
+volume Load large 
+dataset Data loads 
+within 
+acceptable time  Use 
+aggregated/cached 
+data 
+4.  Dashboard Data 
+inconsistency Data 
+anomaly 
+exists System still 
+displays 
+cleaned data  Outliers handled in 
+backend 
+ 
+C. Data Processing & Validation (Backend) 
+No Feature Scenario Steps Expected 
+Result Alternative / 
+Error Handling 
+1.  Data 
+Input Valid 
+transaction  New vending 
+data recorded  Data stored 
+correctly - 
+2.  Data 
+Cleaning Duplicate 
+records Duplicate 
+detected System 
+removes 
+duplicates  Log recorded for 
+audit 
+3.  Data 
+Cleaning Missing 
+values Null data found  Data excluded 
+or imputed  System flags 
+invalid data  
+4.  Mapping Slot 
+mismatch Slot not 
+mapped to 
+flavor System checks 
+master mapping If not found ÔåÆ 
+error log 
+5.  Data 
+Integrity Invalid 
+format Incorrect data 
+format Data rejected Error message 
+logged 
+ 
+D. Forecasting Module (ML UI) 
+No Feature Scenario Steps Expected 
+Result Alternative / 
+Error Handling 
+1.  Forecast Generate 
+prediction User opens 
+forecast module 3-month 
+forecast 
+displayed  - 
+2.  Forecast Flavor-
+level 
+prediction  View detail 
+forecast Breakdown per 
+flavor shown - 
+3.  Forecast Low data 
+availability  Limited 
+historical data Forecast still 
+generated System shows 
+warning: "Low 
+data accuracy"  
+Page 20 of 21 - Integrity Submission
+Submission ID
+trn:oid:::1:3524552941
+Page 20 of 21 - Integrity Submission
+Submission ID
+trn:oid:::1:3524552941
+
+
+===== HALAMAN 21 =====
+  
+ 
+14 
+ 4.  Forecast High 
+anomaly 
+data Extreme spikes 
+in data Model handles 
+preprocessing Outliers removed 
+5.  Forecast Accuracy 
+metrics View 
+MAE/MAPE Metrics 
+displayed 
+clearly If high error ÔåÆ 
+warning shown 
+ 
+E. Procurement Planning (Decision Support UI) 
+No.  Feature Scenario Steps Expected 
+Result Alternative / 
+Error Handling 
+1.  Planning Auto-
+generate 
+plan System uses 
+forecast Draft 
+procurement 
+plan created  - 
+2.  Planning Edit plan GA modifies 
+quantity Changes saved 
+successfully  - 
+3.  Planning Save plan User confirms 
+plan Plan stored in 
+database Confirmation 
+popup shown  
+4.  Planning No forecast 
+data Generate 
+without forecast Process blocked System shows: 
+"Forecast 
+required" 
+5.  Planning Overwrite 
+plan Existing plan 
+updated Data updated 
+correctly Require 
+confirmation 
+ 
+Page 21 of 21 - Integrity Submission
+Submission ID
+trn:oid:::1:3524552941
+Page 21 of 21 - Integrity Submission
+Submission ID
+trn:oid:::1:3524552941
+

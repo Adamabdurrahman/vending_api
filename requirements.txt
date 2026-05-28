@@ -1,21 +1,6 @@
-# Web Framework
 fastapi
 uvicorn
-
-# Database
 sqlalchemy
 pyodbc
-
-# API Schema
 pydantic
 pydantic-settings
-
-# Data & ML
-pandas
-numpy
-scikit-learn
-xgboost
-joblib
-
-# Calendar / Holidays
-holidays
