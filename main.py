@@ -22,6 +22,12 @@ import calendar_service
 import manual_insert_service
 import retrain_log_service
 import user_auth_service
+import variant_service
+import restock_service
+import slot_service
+import machine_service
+import shift_service
+import inventory_service
 
 # Import dari file lokal
 import models
@@ -579,4 +585,276 @@ def api_admin_reject_user(userId: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
+# ============ VARIANT CRUD ENDPOINTS ============
+
+@app.get("/api/v1/variant", tags=["Variant Management"], response_model=schemas.VariantListResponse)
+def get_all_variants(status: int = None, db: Session = Depends(get_db)):
+    """
+    Ambil daftar semua varian
+    
+    Query Parameters:
+    - status: Optional filter (0=inactive, 1=active)
+    """
+    result = variant_service.get_all_variants(db, status_filter=status)
+    return schemas.VariantListResponse(
+        total=result["total"],
+        data=result["data"]
+    )
+
+@app.get("/api/v1/variant/{variant_id}", tags=["Variant Management"], response_model=schemas.VariantResponse)
+def get_variant_detail(variant_id: int, db: Session = Depends(get_db)):
+    """
+    Ambil detail varian berdasarkan ID
+    """
+    return variant_service.get_variant_by_id(db, variant_id)
+
+@app.post("/api/v1/variant", tags=["Variant Management"], response_model=schemas.VariantResponse, status_code=status.HTTP_201_CREATED)
+def create_new_variant(request: schemas.VariantCreateRequest, db: Session = Depends(get_db)):
+    """
+    Buat varian baru
+    
+    Body:
+    - nama_variant: Nama varian (required, unique)
+    - image_url: URL gambar varian (optional)
+    - status: Status varian (0=inactive, 1=active, default=1)
+    """
+    return variant_service.create_variant(db, request)
+
+@app.put("/api/v1/variant/{variant_id}", tags=["Variant Management"], response_model=schemas.VariantResponse)
+def update_existing_variant(variant_id: int, request: schemas.VariantUpdateRequest, db: Session = Depends(get_db)):
+    """
+    Update varian yang ada
+    
+    Body (semua field optional):
+    - nama_variant: Nama varian baru
+    - image_url: URL gambar varian baru
+    - status: Status baru (0=inactive, 1=active)
+    """
+    return variant_service.update_variant(db, variant_id, request)
+
+@app.delete("/api/v1/variant/{variant_id}", tags=["Variant Management"])
+def delete_existing_variant(variant_id: int, db: Session = Depends(get_db)):
+    """
+    Hapus varian berdasarkan ID
+    """
+    return variant_service.delete_variant(db, variant_id)
+
+@app.get("/api/v1/variant/active", tags=["Variant Management"], response_model=list[schemas.VariantResponse])
+def get_active_variants_only(db: Session = Depends(get_db)):
+    """
+    Ambil hanya varian yang aktif (status = 1)
+    """
+    return variant_service.get_active_variants(db)
+
+
+# ============ RESTOCK CRUD ENDPOINTS ============
+
+@app.get("/api/v1/restock", tags=["Restock Management"], response_model=schemas.RestockListResponse)
+def get_all_restocks(status: int = None, db: Session = Depends(get_db)):
+    """
+    Ambil daftar semua restock
+    
+    Query Parameters:
+    - status: Optional filter (0=inactive, 1=active)
+    """
+    result = restock_service.get_all_restocks(db, status_filter=status)
+    return schemas.RestockListResponse(
+        total=result["total"],
+        data=result["data"]
+    )
+
+@app.get("/api/v1/restock/{restock_id}", tags=["Restock Management"], response_model=schemas.RestockResponse)
+def get_restock_detail(restock_id: int, db: Session = Depends(get_db)):
+    """
+    Ambil detail restock berdasarkan ID
+    """
+    return restock_service.get_restock_by_id(db, restock_id)
+
+@app.get("/api/v1/restock/vm/{vm_id}", tags=["Restock Management"], response_model=schemas.RestockByVMResponse)
+def get_restock_by_vm(vm_id: int, db: Session = Depends(get_db)):
+    """
+    Ambil semua restock untuk vending machine tertentu
+    
+    Path Parameters:
+    - vm_id: ID vending machine
+    """
+    result = restock_service.get_restock_by_vm(db, vm_id)
+    return schemas.RestockByVMResponse(**result)
+
+@app.post("/api/v1/restock", tags=["Restock Management"], response_model=schemas.RestockResponse, status_code=status.HTTP_201_CREATED)
+def create_new_restock(request: schemas.RestockCreateRequest, db: Session = Depends(get_db)):
+    """
+    Buat/Update restock baru untuk slot tertentu
+    
+    Body:
+    - id_recnum_mav: ID vending machine (required)
+    - slot_number: Nomor slot (A1, B2, dll) (required)
+    - stok_qty: Jumlah stok (required)
+    - user_input: Username yang input (default: admin)
+    - status_restok: Status (0=inactive, 1=active, default=1)
+    
+    Note: Jika slot sudah ada, akan di-update. Jika belum ada, akan dibuat baru.
+    """
+    return restock_service.create_restock(db, request)
+
+@app.put("/api/v1/restock/{restock_id}", tags=["Restock Management"], response_model=schemas.RestockResponse)
+def update_existing_restock(restock_id: int, request: schemas.RestockUpdateRequest, db: Session = Depends(get_db)):
+    """
+    Update restock yang ada
+    
+    Path Parameters:
+    - restock_id: ID restock
+    
+    Body (semua field optional):
+    - stok_qty: Jumlah stok baru
+    - status_restok: Status baru (0=inactive, 1=active)
+    - user_input: Username yang update
+    """
+    return restock_service.update_restock(db, restock_id, request)
+
+@app.delete("/api/v1/restock/{restock_id}", tags=["Restock Management"])
+def delete_existing_restock(restock_id: int, db: Session = Depends(get_db)):
+    """
+    Hapus restock berdasarkan ID
+    """
+    return restock_service.delete_restock(db, restock_id)
+
+@app.put("/api/v1/restock/vm/{vm_id}/slot/{slot_number}", tags=["Restock Management"], response_model=schemas.RestockResponse)
+def update_stock_quantity(vm_id: int, slot_number: str, stok_qty: int, user: str = "admin", db: Session = Depends(get_db)):
+    """
+    Update kuantitas stok untuk slot tertentu (shortcut endpoint)
+    
+    Path Parameters:
+    - vm_id: ID vending machine
+    - slot_number: Nomor slot (A1, B2, dll)
+    
+    Query Parameters:
+    - stok_qty: Jumlah stok baru (required)
+    - user: Username yang update (default: admin)
+    """
+    return restock_service.update_stock_qty(db, vm_id, slot_number, stok_qty, user)
+
+@app.get("/api/v1/restock/alerts/low-stock", tags=["Restock Management"])
+def get_low_stock_alerts(threshold: int = 10, db: Session = Depends(get_db)):
+    """
+    Ambil restock dengan stok di bawah threshold (untuk alert sistem)
+    
+    Query Parameters:
+    - threshold: Batas minimal stok (default: 10)
+    """
+    return restock_service.get_low_stock_alerts(db, threshold)
+
+
+# ============ SLOT NUMBER CRUD ENDPOINTS ============
+
+@app.get("/api/v1/slot", tags=["Slot Number"], response_model=schemas.SlotByVMResponse)
+def get_slots(vm_id: int, db: Session = Depends(get_db)):
+    """Ambil daftar slot untuk VM tertentu"""
+    return slot_service.get_slots_by_vm(db, vm_id)
+
+@app.get("/api/v1/slot/{slot_id}", tags=["Slot Number"], response_model=schemas.SlotResponse)
+def get_slot_detail(slot_id: int, db: Session = Depends(get_db)):
+    """Ambil detail slot berdasarkan ID"""
+    return slot_service.get_slot_by_id(db, slot_id)
+
+@app.post("/api/v1/slot", tags=["Slot Number"], response_model=schemas.SlotResponse, status_code=status.HTTP_201_CREATED)
+def create_new_slot(request: schemas.SlotCreateRequest, db: Session = Depends(get_db)):
+    """Buat konfigurasi slot baru untuk mesin"""
+    return slot_service.create_slot(db, request)
+
+@app.put("/api/v1/slot/{slot_id}", tags=["Slot Number"], response_model=schemas.SlotResponse)
+def update_existing_slot(slot_id: int, request: schemas.SlotUpdateRequest, db: Session = Depends(get_db)):
+    """Update konfigurasi slot"""
+    return slot_service.update_slot(db, slot_id, request)
+
+@app.delete("/api/v1/slot/{slot_id}", tags=["Slot Number"])
+def delete_existing_slot(slot_id: int, db: Session = Depends(get_db)):
+    """Hapus konfigurasi slot"""
+    return slot_service.delete_slot(db, slot_id)
+
+
+# ============ MACHINE CRUD ENDPOINTS ============
+
+@app.get("/api/v1/machine", tags=["Manage Alat VM"])
+def get_all_machines(db: Session = Depends(get_db)):
+    """Ambil semua mesin vending"""
+    return machine_service.get_all_machines(db)
+
+@app.get("/api/v1/machine/{machine_id}", tags=["Manage Alat VM"], response_model=schemas.MachineResponse)
+def get_machine_detail(machine_id: int, db: Session = Depends(get_db)):
+    """Ambil detail mesin berdasarkan ID"""
+    return machine_service.get_machine_by_id(db, machine_id)
+
+@app.post("/api/v1/machine", tags=["Manage Alat VM"], response_model=schemas.MachineResponse, status_code=status.HTTP_201_CREATED)
+def create_new_machine(request: schemas.MachineCreateRequest, db: Session = Depends(get_db)):
+    """Tambah mesin vending baru"""
+    return machine_service.create_machine(db, request)
+
+@app.put("/api/v1/machine/{machine_id}", tags=["Manage Alat VM"], response_model=schemas.MachineResponse)
+def update_existing_machine(machine_id: int, request: schemas.MachineUpdateRequest, db: Session = Depends(get_db)):
+    """Update detail mesin vending"""
+    return machine_service.update_machine(db, machine_id, request)
+
+@app.delete("/api/v1/machine/{machine_id}", tags=["Manage Alat VM"])
+def delete_existing_machine(machine_id: int, db: Session = Depends(get_db)):
+    """Hapus data mesin vending"""
+    return machine_service.delete_machine(db, machine_id)
+
+
+# ============ SHIFT CRUD ENDPOINTS ============
+
+@app.get("/api/v1/shift", tags=["Shift Management"])
+def get_all_shifts(db: Session = Depends(get_db)):
+    """Ambil semua jam shift"""
+    return shift_service.get_all_shifts(db)
+
+@app.get("/api/v1/shift/{shift_id}", tags=["Shift Management"], response_model=schemas.ShiftResponse)
+def get_shift_detail(shift_id: int, db: Session = Depends(get_db)):
+    """Ambil detail shift berdasarkan ID"""
+    return shift_service.get_shift_by_id(db, shift_id)
+
+@app.post("/api/v1/shift", tags=["Shift Management"], response_model=schemas.ShiftResponse, status_code=status.HTTP_201_CREATED)
+def create_new_shift(request: schemas.ShiftCreateRequest, db: Session = Depends(get_db)):
+    """Buat jam shift baru"""
+    return shift_service.create_shift(db, request)
+
+@app.put("/api/v1/shift/{shift_id}", tags=["Shift Management"], response_model=schemas.ShiftResponse)
+def update_existing_shift(shift_id: int, request: schemas.ShiftUpdateRequest, db: Session = Depends(get_db)):
+    """Update jam shift"""
+    return shift_service.update_shift(db, shift_id, request)
+
+@app.delete("/api/v1/shift/{shift_id}", tags=["Shift Management"])
+def delete_existing_shift(shift_id: int, db: Session = Depends(get_db)):
+    """Hapus data shift"""
+    return shift_service.delete_shift(db, shift_id)
+
+
+# ============ INVENTORY DASHBOARD ENDPOINTS ============
+
+@app.get("/api/v1/inventory/dashboard", tags=["Inventory Dashboard"], response_model=schemas.InventoryDashboardResponse)
+def get_inventory_dashboard(
+    year: int = None,
+    quarter: int = None,
+    page: int = 1,
+    per_page: int = 10,
+    variant: str = None,
+    type: str = None,
+    db: Session = Depends(get_db),
+):
+    """Ambil data comprehensive inventory dashboard, termasuk forecasting, stok gudang/VM, pergerakan stok, dan rekomendasi pembelian."""
+    return inventory_service.get_inventory_dashboard(db, year, quarter, page, per_page, variant, type)
+
+@app.post("/api/v1/inventory/dashboard", tags=["Inventory Dashboard"], response_model=schemas.InventoryDashboardResponse)
+def post_inventory_dashboard(
+    request: schemas.StockInRequest,
+    year: int = None,
+    quarter: int = None,
+    page: int = 1,
+    per_page: int = 10,
+    variant: str = None,
+    type: str = None,
+    db: Session = Depends(get_db),
+):
+    """Tambahkan stok masuk ke gudang lalu kembalikan inventory dashboard terbaru dengan hasil stock-in dan pergerakan stok."""
+    return inventory_service.get_inventory_dashboard(db, year, quarter, page, per_page, variant, type, request)
 

@@ -229,9 +229,39 @@ def run_setup():
             print("  [OK] Tabel RetrainLog berhasil dibuat!")
 
         # ==============================================================
-        # STEP 1E: CREATE TABLE SystemNotifications
+        # STEP 1D-1: CREATE TABLE warehouse_stock
         # ==============================================================
-        print("\n[Step 1E] Membuat tabel SystemNotifications...")
+        print("\n[Step 1D-1] Membuat tabel warehouse_stock...")
+
+        exists_ws = conn.execute(
+            text("""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'warehouse_stock'
+        """)
+        ).scalar()
+
+        if exists_ws > 0:
+            print("  [INFO] Tabel warehouse_stock SUDAH ADA - skip CREATE.")
+        else:
+            conn.execute(
+                text("""
+                CREATE TABLE [dbo].[warehouse_stock] (
+                    id              INT IDENTITY(1,1) PRIMARY KEY,
+                    variant_name    NVARCHAR(50)  NOT NULL,
+                    movement_type   NVARCHAR(10)  NOT NULL,
+                    qty             INT           NOT NULL,
+                    balance_after   INT           NOT NULL,
+                    note            NVARCHAR(200) NULL,
+                    created_by      NVARCHAR(50)  NOT NULL,
+                    created_at      DATETIME      NOT NULL DEFAULT GETDATE(),
+                    CONSTRAINT CK_warehouse_movement_type CHECK (movement_type IN ('IN', 'OUT')),
+                    CONSTRAINT CK_warehouse_qty_positive CHECK (qty > 0)
+                )
+            """)
+            )
+            print("  [OK] Tabel warehouse_stock berhasil dibuat!")
+
+        # ==============================================================
 
         exists_sn = conn.execute(
             text("""
