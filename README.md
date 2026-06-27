@@ -34,7 +34,7 @@ Pastikan tools berikut sudah terinstall sebelum menjalankan project:
 ### 1. Clone Repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/vending_api.git
+[git clone https://github.com/YOUR_USERNAME/vending_api.git](https://github.com/Adamabdurrahman/vending_api.git)
 cd vending_api
 ```
 
