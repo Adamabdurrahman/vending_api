@@ -15,19 +15,24 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+import calendar_service
+import dashboard_service
 import etl_service
 import forecast_service
-import dashboard_service
-import calendar_service
+import inventory_service
+import machine_service
 import manual_insert_service
-import retrain_log_service
-import user_auth_service
 
 # Import dari file lokal
 import models
 import notif_service
+import restock_service
+import retrain_log_service
 import retrain_service
 import schemas
+import shift_service
+import slot_service
+import user_auth_service
 from database import engine, get_db
 
 # (Opsi) Membuat tabel jika belum ada, walau di sini tabel sudah ada di db
@@ -63,25 +68,25 @@ def login(request: schemas.LoginRequest, db: Session = Depends(get_db)):
         )
 
     # Validasi status_active
-    if user.status_active != '1':
-        if user.status_active == 'P':
+    if user.status_active != "1":
+        if user.status_active == "P":
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, 
-                detail="Akun Anda masih pending persetujuan Superadmin"
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Akun Anda masih pending persetujuan Superadmin",
             )
-        elif user.status_active == 'T':
+        elif user.status_active == "T":
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, 
+                status_code=status.HTTP_403_FORBIDDEN,
                 detail={
                     "error_code": "PENDING_OTP",
                     "message": "Akun Anda menunggu verifikasi token email",
-                    "user_id": user.Id
-                }
+                    "user_id": user.Id,
+                },
             )
         else:
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, 
-                detail="Akun Anda tidak aktif atau dinonaktifkan"
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Akun Anda tidak aktif atau dinonaktifkan",
             )
 
     # Jika sukses
@@ -96,7 +101,6 @@ def login(request: schemas.LoginRequest, db: Session = Depends(get_db)):
         "status_active": user.status_active,
         "photo_url": photo_url,
     }
-
 
 
 # ========================================================
@@ -411,20 +415,32 @@ def api_mark_all_read():
 # KUMPULAN ENDPOINT DASHBOARD SUMMARY (GROUP: DASHBOARD)
 # ========================================================
 
+
 @app.get("/api/v1/dashboard/metrics", tags=["Dashboard Summary"])
-def api_dashboard_metrics(start_date: str, end_date: str, shift_id: str = "ALL", db: Session = Depends(get_db)):
+def api_dashboard_metrics(
+    start_date: str, end_date: str, shift_id: str = "ALL", db: Session = Depends(get_db)
+):
     return dashboard_service.get_metrics_data(db, start_date, end_date, shift_id)
 
+
 @app.get("/api/v1/dashboard/consumption-chart", tags=["Dashboard Summary"])
-def api_consumption_chart(start_date: str, end_date: str, shift_id: str = "ALL", db: Session = Depends(get_db)):
+def api_consumption_chart(
+    start_date: str, end_date: str, shift_id: str = "ALL", db: Session = Depends(get_db)
+):
     return dashboard_service.get_consumption_chart(db, start_date, end_date, shift_id)
 
+
 @app.get("/api/v1/dashboard/sales-analytics", tags=["Dashboard Summary"])
-def api_sales_analytics(start_date: str, end_date: str, shift_id: str = "ALL", db: Session = Depends(get_db)):
+def api_sales_analytics(
+    start_date: str, end_date: str, shift_id: str = "ALL", db: Session = Depends(get_db)
+):
     return dashboard_service.get_sales_analytics(db, start_date, end_date, shift_id)
 
+
 @app.get("/api/v1/dashboard/latest-transactions", tags=["Dashboard Summary"])
-def api_latest_transactions(start_date: str, end_date: str, shift_id: str = "ALL", db: Session = Depends(get_db)):
+def api_latest_transactions(
+    start_date: str, end_date: str, shift_id: str = "ALL", db: Session = Depends(get_db)
+):
     return dashboard_service.get_latest_transactions(db, start_date, end_date, shift_id)
 
 
@@ -432,24 +448,35 @@ def api_latest_transactions(start_date: str, end_date: str, shift_id: str = "ALL
 # KUMPULAN ENDPOINT PREDICTION DASHBOARD (GROUP: PREDICTION)
 # ========================================================
 
+
 @app.get("/api/v1/prediction/summary", tags=["Prediction Dashboard"])
-def api_prediction_summary(year: int = 2026, quarter: int = 1, db: Session = Depends(get_db)):
+def api_prediction_summary(
+    year: int = 2026, quarter: int = 1, db: Session = Depends(get_db)
+):
     return dashboard_service.get_prediction_summary(db, year, quarter)
 
+
 @app.get("/api/v1/prediction/variant-errors", tags=["Prediction Dashboard"])
-def api_variant_errors(year: int = 2026, quarter: int = 1, db: Session = Depends(get_db)):
+def api_variant_errors(
+    year: int = 2026, quarter: int = 1, db: Session = Depends(get_db)
+):
     return dashboard_service.get_variant_errors(db, year, quarter)
+
 
 @app.get("/api/v1/prediction/shift-errors", tags=["Prediction Dashboard"])
 def api_shift_errors(year: int = 2026, quarter: int = 1, db: Session = Depends(get_db)):
     return dashboard_service.get_shift_errors(db, year, quarter)
 
+
 @app.get("/api/v1/prediction/daily-logs", tags=["Prediction Dashboard"])
 def api_daily_logs(year: int = 2026, quarter: int = 1, db: Session = Depends(get_db)):
     return dashboard_service.get_daily_logs(db, year, quarter)
 
+
 @app.get("/api/v1/prediction/chart-data", tags=["Prediction Dashboard"])
-def api_prediction_chart_data(year: int = 2026, quarter: int = 1, db: Session = Depends(get_db)):
+def api_prediction_chart_data(
+    year: int = 2026, quarter: int = 1, db: Session = Depends(get_db)
+):
     return dashboard_service.get_chart_data(db, year, quarter)
 
 
@@ -457,9 +484,11 @@ def api_prediction_chart_data(year: int = 2026, quarter: int = 1, db: Session = 
 # KUMPULAN ENDPOINT OPERATIONAL CALENDAR (GROUP: CALENDAR)
 # ========================================================
 
+
 @app.get("/api/v1/calendar", tags=["Calendar"])
 def api_get_calendar(year: int = 2026, db: Session = Depends(get_db)):
     return calendar_service.get_calendar_year_data(db, year)
+
 
 class CalendarDayUpdate(BaseModel):
     date: str
@@ -468,21 +497,32 @@ class CalendarDayUpdate(BaseModel):
     is_ramadan: bool
     is_shutdown: bool
 
+
 @app.post("/api/v1/calendar/day", tags=["Calendar"])
 def api_update_calendar_day(req: CalendarDayUpdate, db: Session = Depends(get_db)):
     return calendar_service.update_calendar_day(
-        db, req.date, req.day_category, req.is_working_day, req.is_ramadan, req.is_shutdown
+        db,
+        req.date,
+        req.day_category,
+        req.is_working_day,
+        req.is_ramadan,
+        req.is_shutdown,
     )
+
 
 class CalendarYearGenerate(BaseModel):
     year: int
 
+
 @app.post("/api/v1/calendar/generate", tags=["Calendar"])
-def api_generate_calendar_year(req: CalendarYearGenerate, db: Session = Depends(get_db)):
+def api_generate_calendar_year(
+    req: CalendarYearGenerate, db: Session = Depends(get_db)
+):
     try:
         return calendar_service.generate_calendar_year(db, req.year)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
 
 @app.delete("/api/v1/calendar/year/{year}", tags=["Calendar"])
 def api_delete_calendar_year(year: int, db: Session = Depends(get_db)):
@@ -495,12 +535,16 @@ def api_delete_calendar_year(year: int, db: Session = Depends(get_db)):
 
 from fastapi.responses import FileResponse
 
+
 @app.get("/api/v1/manual-insert/template", tags=["Manual Insert"])
 def api_download_template():
     manual_insert_service.ensure_template_exists()
     if not os.path.exists(manual_insert_service.TEMPLATE_PATH):
         raise HTTPException(status_code=404, detail="File template tidak ditemukan")
-    return FileResponse(manual_insert_service.TEMPLATE_PATH, filename="Template_Insert.xlsx")
+    return FileResponse(
+        manual_insert_service.TEMPLATE_PATH, filename="Template_Insert.xlsx"
+    )
+
 
 @app.post("/api/v1/manual-insert/upload", tags=["Manual Insert"])
 async def api_upload_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
@@ -512,8 +556,11 @@ async def api_upload_excel(file: UploadFile = File(...), db: Session = Depends(g
 # KUMPULAN ENDPOINT RETRAIN LOGS (GROUP: RETRAIN LOGS)
 # ========================================================
 
+
 @app.get("/api/v1/retrain/logs", tags=["Retrain Logs"])
-def api_get_retrain_logs(limit: int = 100, offset: int = 0, db: Session = Depends(get_db)):
+def api_get_retrain_logs(
+    limit: int = 100, offset: int = 0, db: Session = Depends(get_db)
+):
     return retrain_log_service.get_retrain_logs_data(db, limit, offset)
 
 
@@ -521,16 +568,25 @@ def api_get_retrain_logs(limit: int = 100, offset: int = 0, db: Session = Depend
 # KUMPULAN ENDPOINT AUTENTIKASI & USER MANAGEMENT (NEW)
 # ========================================================
 
-@app.post("/api/v1/auth/register", tags=["Autentikasi & User Management"], status_code=201)
+
+@app.post(
+    "/api/v1/auth/register", tags=["Autentikasi & User Management"], status_code=201
+)
 def api_register_user(req: schemas.RegisterRequest, db: Session = Depends(get_db)):
     try:
         return user_auth_service.register_user(db, req)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-@app.get("/api/v1/admin/pending-users", tags=["Autentikasi & User Management"], response_model=list[schemas.PendingUserResponse])
+
+@app.get(
+    "/api/v1/admin/pending-users",
+    tags=["Autentikasi & User Management"],
+    response_model=list[schemas.PendingUserResponse],
+)
 def api_get_pending_users(db: Session = Depends(get_db)):
     return user_auth_service.get_pending_users(db)
+
 
 @app.post("/api/v1/admin/approve-user", tags=["Autentikasi & User Management"])
 def api_approve_user(req: schemas.ApproveUserRequest, db: Session = Depends(get_db)):
@@ -539,37 +595,62 @@ def api_approve_user(req: schemas.ApproveUserRequest, db: Session = Depends(get_
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
+
 @app.post("/api/v1/auth/verify-token", tags=["Autentikasi & User Management"])
-def api_verify_user_token(req: schemas.VerifyTokenRequest, db: Session = Depends(get_db)):
+def api_verify_user_token(
+    req: schemas.VerifyTokenRequest, db: Session = Depends(get_db)
+):
     try:
         return user_auth_service.verify_user_token(db, req.user_id, req.token)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
+
 @app.post("/api/v1/auth/reset-password/request", tags=["Autentikasi & User Management"])
-def api_request_reset_password(req: schemas.ResetPasswordRequest, db: Session = Depends(get_db)):
+def api_request_reset_password(
+    req: schemas.ResetPasswordRequest, db: Session = Depends(get_db)
+):
     try:
         return user_auth_service.request_reset_password(db, req.username, req.email)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
+
 @app.post("/api/v1/auth/reset-password/confirm", tags=["Autentikasi & User Management"])
-def api_confirm_reset_password(req: schemas.ResetPasswordConfirmRequest, db: Session = Depends(get_db)):
+def api_confirm_reset_password(
+    req: schemas.ResetPasswordConfirmRequest, db: Session = Depends(get_db)
+):
     try:
-        return user_auth_service.confirm_reset_password(db, req.user_id, req.token, req.new_password)
+        return user_auth_service.confirm_reset_password(
+            db, req.user_id, req.token, req.new_password
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-@app.get("/api/v1/admin/users", tags=["Autentikasi & User Management"], response_model=list[schemas.UserManagementResponse])
+
+@app.get(
+    "/api/v1/admin/users",
+    tags=["Autentikasi & User Management"],
+    response_model=list[schemas.UserManagementResponse],
+)
 def api_get_all_users(db: Session = Depends(get_db)):
     return user_auth_service.get_all_users(db)
 
-@app.put("/api/v1/admin/users/{userId}/update-role-password", tags=["Autentikasi & User Management"])
-def api_admin_update_user(userId: str, req: schemas.AdminUpdateUserRequest, db: Session = Depends(get_db)):
+
+@app.put(
+    "/api/v1/admin/users/{userId}/update-role-password",
+    tags=["Autentikasi & User Management"],
+)
+def api_admin_update_user(
+    userId: str, req: schemas.AdminUpdateUserRequest, db: Session = Depends(get_db)
+):
     try:
-        return user_auth_service.admin_update_user(db, userId, req.level_user, req.new_password)
+        return user_auth_service.admin_update_user(
+            db, userId, req.level_user, req.new_password
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
 
 @app.delete("/api/v1/admin/users/{userId}", tags=["Autentikasi & User Management"])
 def api_admin_reject_user(userId: str, db: Session = Depends(get_db)):
@@ -579,4 +660,385 @@ def api_admin_reject_user(userId: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
+# ========================================================
+# KUMPULAN ENDPOINT CRUD MASTER VARIANT (GROUP: VARIAN)
+# ========================================================
 
+
+@app.get(
+    "/api/v1/variants",
+    tags=["Varian (Android)"],
+    response_model=list[schemas.VariantResponse],
+)
+def get_all_variants(db: Session = Depends(get_db)):
+    """
+    Mengambil semua data varian rasa susu.
+    """
+    return db.query(models.Variant).all()
+
+
+@app.get(
+    "/api/v1/variants/{variant_id}",
+    tags=["Varian (Android)"],
+    response_model=schemas.VariantResponse,
+)
+def get_variant_by_id(variant_id: int, db: Session = Depends(get_db)):
+    """
+    Mengambil satu data varian rasa berdasarkan ID.
+    """
+    variant = (
+        db.query(models.Variant)
+        .filter(models.Variant.id_recnum_variant == variant_id)
+        .first()
+    )
+    if not variant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Varian tidak ditemukan"
+        )
+    return variant
+
+
+@app.post(
+    "/api/v1/variants",
+    tags=["Varian (Android)"],
+    response_model=schemas.VariantResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_variant(req: schemas.VariantCreate, db: Session = Depends(get_db)):
+    """
+    Menambahkan varian rasa baru ke database.
+    """
+    # Mencari max id saat ini
+    max_id = (
+        db.query(models.Variant.id_recnum_variant)
+        .order_by(models.Variant.id_recnum_variant.desc())
+        .first()
+    )
+    next_id = (max_id[0] + 1) if max_id else 1
+
+    new_variant = models.Variant(
+        id_recnum_variant=next_id,
+        nama_variant=req.nama_variant,
+        url_image=req.url_image,
+        status_variant=req.status_variant,
+    )
+    db.add(new_variant)
+    db.commit()
+    db.refresh(new_variant)
+    return new_variant
+
+
+@app.put(
+    "/api/v1/variants/{variant_id}",
+    tags=["Varian (Android)"],
+    response_model=schemas.VariantResponse,
+)
+def update_variant(
+    variant_id: int, req: schemas.VariantUpdate, db: Session = Depends(get_db)
+):
+    """
+    Memperbarui data varian rasa susu.
+    """
+    variant = (
+        db.query(models.Variant)
+        .filter(models.Variant.id_recnum_variant == variant_id)
+        .first()
+    )
+    if not variant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Varian tidak ditemukan"
+        )
+
+    if req.nama_variant is not None:
+        variant.nama_variant = req.nama_variant
+    if req.url_image is not None:
+        variant.url_image = req.url_image
+    if req.status_variant is not None:
+        variant.status_variant = req.status_variant
+
+    db.commit()
+    db.refresh(variant)
+    return variant
+
+
+@app.delete("/api/v1/variants/{variant_id}", tags=["Varian (Android)"])
+def delete_variant(variant_id: int, db: Session = Depends(get_db)):
+    """
+    Menghapus data varian rasa susu dari database.
+    """
+    variant = (
+        db.query(models.Variant)
+        .filter(models.Variant.id_recnum_variant == variant_id)
+        .first()
+    )
+    if not variant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Varian tidak ditemukan"
+        )
+
+    db.delete(variant)
+    db.commit()
+    return {
+        "status": "success",
+        "message": f"Varian rasa dengan ID {variant_id} berhasil dihapus",
+    }
+
+
+# ========================================================
+# RESTOCK MANAGEMENT
+# ========================================================
+
+
+@app.get("/api/v1/restock", tags=["Restock Management"])
+def get_all_restocks(status_filter: str = None, db: Session = Depends(get_db)):
+    """List semua restock. Filter opsional: ?status_filter=0 atau 1"""
+    return restock_service.get_all_restocks(db, status_filter)
+
+
+@app.get("/api/v1/restock/alerts/low-stock", tags=["Restock Management"])
+def get_low_stock_alerts(threshold: int = 10, db: Session = Depends(get_db)):
+    """Alert slot dengan stok di bawah threshold (default 10)"""
+    return restock_service.get_low_stock_alerts(db, threshold)
+
+
+@app.get("/api/v1/restock/vm/{vm_id}", tags=["Restock Management"])
+def get_restock_by_vm(vm_id: int, db: Session = Depends(get_db)):
+    """Semua restock aktif untuk satu vending machine"""
+    return restock_service.get_restock_by_vm(db, vm_id)
+
+
+@app.get("/api/v1/restock/{restock_id}", tags=["Restock Management"])
+def get_restock_detail(restock_id: int, db: Session = Depends(get_db)):
+    """Detail restock berdasarkan ID"""
+    return restock_service.get_restock_by_id(db, restock_id)
+
+
+@app.post(
+    "/api/v1/restock", tags=["Restock Management"], status_code=status.HTTP_201_CREATED
+)
+def create_new_restock(
+    request: schemas.RestockCreateRequest, db: Session = Depends(get_db)
+):
+    """Buat/update restock slot (upsert: jika slot sudah ada, di-UPDATE)"""
+    return restock_service.create_restock(db, request)
+
+
+@app.put("/api/v1/restock/vm/{vm_id}/slot/{slot_number}", tags=["Restock Management"])
+def update_stock_quantity(
+    vm_id: int,
+    slot_number: str,
+    stok_qty: int,
+    user: str = "admin",
+    db: Session = Depends(get_db),
+):
+    """Shortcut update qty stok untuk slot tertentu"""
+    return restock_service.update_stock_qty(db, vm_id, slot_number, stok_qty, user)
+
+
+@app.put("/api/v1/restock/{restock_id}", tags=["Restock Management"])
+def update_existing_restock(
+    restock_id: int,
+    request: schemas.RestockUpdateRequest,
+    db: Session = Depends(get_db),
+):
+    """Update restock berdasarkan ID"""
+    return restock_service.update_restock(db, restock_id, request)
+
+
+@app.delete("/api/v1/restock/{restock_id}", tags=["Restock Management"])
+def delete_existing_restock(restock_id: int, db: Session = Depends(get_db)):
+    """Hapus restock berdasarkan ID"""
+    return restock_service.delete_restock(db, restock_id)
+
+
+# ========================================================
+# SLOT NUMBER MANAGEMENT
+# ========================================================
+
+
+@app.get("/api/v1/slot", tags=["Slot Number"])
+def get_slots(vm_id: int, db: Session = Depends(get_db)):
+    """Ambil semua slot untuk satu vending machine"""
+    return slot_service.get_slots_by_vm(db, vm_id)
+
+
+@app.get("/api/v1/slot/{slot_id}", tags=["Slot Number"])
+def get_slot_detail(slot_id: int, db: Session = Depends(get_db)):
+    """Detail slot berdasarkan ID"""
+    return slot_service.get_slot_by_id(db, slot_id)
+
+
+@app.post("/api/v1/slot", tags=["Slot Number"], status_code=status.HTTP_201_CREATED)
+def create_new_slot(request: schemas.SlotCreateRequest, db: Session = Depends(get_db)):
+    """Buat konfigurasi slot baru untuk mesin"""
+    return slot_service.create_slot(db, request)
+
+
+@app.put("/api/v1/slot/{slot_id}", tags=["Slot Number"])
+def update_existing_slot(
+    slot_id: int, request: schemas.SlotUpdateRequest, db: Session = Depends(get_db)
+):
+    """Update konfigurasi slot"""
+    return slot_service.update_slot(db, slot_id, request)
+
+
+@app.delete("/api/v1/slot/{slot_id}", tags=["Slot Number"])
+def delete_existing_slot(slot_id: int, db: Session = Depends(get_db)):
+    """Hapus konfigurasi slot"""
+    return slot_service.delete_slot(db, slot_id)
+
+
+# ========================================================
+# MANAGE ALAT VM
+# ========================================================
+
+
+@app.get("/api/v1/machine", tags=["Manage Alat VM"])
+def get_all_machines(db: Session = Depends(get_db)):
+    """List semua mesin vending"""
+    return machine_service.get_all_machines(db)
+
+
+@app.get(
+    "/api/v1/machine/{machine_id}",
+    tags=["Manage Alat VM"],
+    response_model=schemas.MachineResponse,
+)
+def get_machine_detail(machine_id: int, db: Session = Depends(get_db)):
+    """Detail mesin berdasarkan ID"""
+    return machine_service.get_machine_by_id(db, machine_id)
+
+
+@app.post(
+    "/api/v1/machine",
+    tags=["Manage Alat VM"],
+    response_model=schemas.MachineResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_new_machine(
+    request: schemas.MachineCreateRequest, db: Session = Depends(get_db)
+):
+    """Tambah mesin vending baru"""
+    return machine_service.create_machine(db, request)
+
+
+@app.put(
+    "/api/v1/machine/{machine_id}",
+    tags=["Manage Alat VM"],
+    response_model=schemas.MachineResponse,
+)
+def update_existing_machine(
+    machine_id: int,
+    request: schemas.MachineUpdateRequest,
+    db: Session = Depends(get_db),
+):
+    """Update data mesin vending"""
+    return machine_service.update_machine(db, machine_id, request)
+
+
+@app.delete("/api/v1/machine/{machine_id}", tags=["Manage Alat VM"])
+def delete_existing_machine(machine_id: int, db: Session = Depends(get_db)):
+    """Hapus data mesin vending"""
+    return machine_service.delete_machine(db, machine_id)
+
+
+# ========================================================
+# SHIFT MANAGEMENT
+# ========================================================
+
+
+@app.get("/api/v1/shift", tags=["Shift Management"])
+def get_all_shifts(db: Session = Depends(get_db)):
+    """List semua shift kerja"""
+    return shift_service.get_all_shifts(db)
+
+
+@app.get(
+    "/api/v1/shift/{shift_id}",
+    tags=["Shift Management"],
+    response_model=schemas.ShiftResponse,
+)
+def get_shift_detail(shift_id: int, db: Session = Depends(get_db)):
+    """Detail shift berdasarkan ID"""
+    return shift_service.get_shift_by_id(db, shift_id)
+
+
+@app.post(
+    "/api/v1/shift",
+    tags=["Shift Management"],
+    response_model=schemas.ShiftResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_new_shift(
+    request: schemas.ShiftCreateRequest, db: Session = Depends(get_db)
+):
+    """Buat shift baru"""
+    return shift_service.create_shift(db, request)
+
+
+@app.put(
+    "/api/v1/shift/{shift_id}",
+    tags=["Shift Management"],
+    response_model=schemas.ShiftResponse,
+)
+def update_existing_shift(
+    shift_id: int, request: schemas.ShiftUpdateRequest, db: Session = Depends(get_db)
+):
+    """Update data shift"""
+    return shift_service.update_shift(db, shift_id, request)
+
+
+@app.delete("/api/v1/shift/{shift_id}", tags=["Shift Management"])
+def delete_existing_shift(shift_id: int, db: Session = Depends(get_db)):
+    """Hapus data shift"""
+    return shift_service.delete_shift(db, shift_id)
+
+
+# ========================================================
+# INVENTORY DASHBOARD
+# ========================================================
+
+
+@app.get("/api/v1/inventory/dashboard", tags=["Inventory Dashboard"])
+def api_inventory_dashboard(
+    year: int = None,
+    quarter: int = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Dashboard utama inventory + DSS.
+    Menjalankan auto-sync stocking events sebelum kalkulasi.
+    Default: kuartal berikutnya dari sekarang.
+    """
+    return inventory_service.get_inventory_dashboard(db, year, quarter)
+
+
+@app.get("/api/v1/inventory/movements", tags=["Inventory Dashboard"])
+def api_inventory_movements(
+    page: int = 1,
+    per_page: int = 10,
+    variant: str = None,
+    type: str = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Riwayat pergerakan stok gudang (IN/OUT) dengan paginasi.
+    Filter opsional: variant, type (IN atau OUT).
+    """
+    return inventory_service.get_stock_movements(db, page, per_page, variant, type)
+
+
+@app.post(
+    "/api/v1/inventory/stock-in",
+    tags=["Inventory Dashboard"],
+    status_code=status.HTTP_201_CREATED,
+)
+def api_inventory_stock_in(
+    request: schemas.InventoryStockInRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Catat stok masuk dari supplier ke gudang (batch per variant).
+    Item dengan qty=0 otomatis diskip. Minimal 1 varian harus qty > 0.
+    """
+    return inventory_service.add_stock_in(db, request)

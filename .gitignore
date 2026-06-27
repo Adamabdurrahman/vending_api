@@ -1,9 +1,34 @@
+# === Python Environment ===
 venv/
 __pycache__/
 *.pyc
+*.pyo
+
+# === Environment & Secrets ===
 .env
-scratch_*.py
-scratch_*.txt
-*.log
+
+# === Logs (contain sensitive data like OTP tokens) ===
+email_log.txt
 error_log.txt
 retrain_log.txt
+*.log
+
+# === ML Model Artifacts (large binary files — regenerated via retrain) ===
+ProductionML/backups/
+*.joblib
+
+# === User Uploads (profile photos, runtime files) ===
+uploads/
+
+# === Development-only scratch & test scripts ===
+scratch_*.py
+scratch_*.txt
+test_*.py
+check_*.py
+
+# === Misc development files ===
+*.sql
+inv_test_out.txt
+test_output.txt
+nul
+=

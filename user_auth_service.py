@@ -6,18 +6,21 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from dotenv import load_dotenv
 import models
 import schemas
+
+load_dotenv()
 
 EMAIL_LOG_PATH = "email_log.txt"
 
 # ============================================================
 # KONFIGURASI GMAIL SMTP UTK KIRIM EMAIL ASLI
 # ============================================================
-# Petunjuk: Silakan ganti email & password dengan akun Anda.
-# Sandi yang digunakan adalah "Sandi Aplikasi" 16-Digit dari Google, bukan sandi utama Gmail Anda.
-SENDER_EMAIL = "adamabdurrahman378@gmail.com"
-SENDER_PASSWORD = "njsx xerr eiyv rsaz"
+# Baca dari file .env — salin .env.example ke .env dan isi.
+# Sandi yang digunakan adalah "Sandi Aplikasi" 16-Digit dari Google.
+SENDER_EMAIL = os.getenv("EMAIL_SENDER", "")
+SENDER_PASSWORD = os.getenv("EMAIL_PASSWORD", "")
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 

@@ -1,17 +1,26 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
+from pydantic_settings import BaseSettings
 import urllib
+import os
+from dotenv import load_dotenv
 
-# Ganti dengan password 'sa' kamu yang sebenarnya.
-# Format: mssql+pyodbc://username:password@server/database?driver=ODBC+Driver+17+for+SQL+Server
-server = r'ADAM123\SQLEXPRESS'
-database = 'db_vending_machine' # Sesuaikan dengan nama database aslimu (di screenshot nama db tidak kelihatan utuh, asumsi 'master' atau sesuaikan)
-username = 'sa'
-password = '07Mei2005'
+load_dotenv()
 
-# Menggunakan OLE DB atau ODBC
-# pyodbc connection string
-connection_string = f"DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={server};DATABASE={database};UID={username};PWD={password}"
+# Baca konfigurasi database dari file .env
+# Salin .env.example ke .env dan isi dengan nilai yang sesuai
+server   = os.getenv("DB_SERVER",   r"YOURPC\SQLEXPRESS")
+database = os.getenv("DB_NAME",     "db_vending_machine")
+username = os.getenv("DB_USERNAME", "sa")
+password = os.getenv("DB_PASSWORD", "")
+
+connection_string = (
+    f"DRIVER={{ODBC Driver 17 for SQL Server}};"
+    f"SERVER={server};"
+    f"DATABASE={database};"
+    f"UID={username};"
+    f"PWD={password}"
+)
 params = urllib.parse.quote_plus(connection_string)
 
 SQLALCHEMY_DATABASE_URL = f"mssql+pyodbc:///?odbc_connect={params}"
