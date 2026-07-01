@@ -3,36 +3,51 @@ from datetime import timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
-def get_shift_filter_sql(db: Session, shift_id: str, alias: str = ""):
+def get_shift_filter_sql(db: Session, shift_name: str, alias: str = ""):
     """
-    Mengambil jam_mulai dan jam_akhir dari dbo.master_settime
-    dan membuat klausa SQL filter berdasarkan update_time dengan dukungan alias tabel.
+    Filter transaksi berdasarkan rentang waktu shift dari master_settime.
+    Menerima shift_name (nama_shift) bukan ID, sehingga bisa menangani
+    satu shift yang punya LEBIH DARI SATU rentang waktu (misal SHIFT1 punya
+    05:00-07:00 DAN 14:30-18:00).
+
+    Strategi ini dipilih karena:
+    - ambil     → punya keterangan SHIFT*, tapi transaksigagal/stocking tidak
+    - stocking  → keterangan = 'Proses Restock Qty Oleh Admin' (tidak ada info shift)
+    - transaksigagal → keterangan = NULL
+
+    Satu-satunya penghubung universal adalah update_time vs jam_mulai/jam_akhir.
     """
-    if not shift_id or shift_id == "ALL":
+    if not shift_name or shift_name == "ALL":
         return "", {}
-    
-    # Query shift time range
-    query = """
-        SELECT jam_mulai, jam_akhir 
-        FROM dbo.master_settime 
-        WHERE id_recnum_mst = :shift_id AND status_active = '1'
-    """
-    row = db.execute(text(query), {"shift_id": shift_id}).fetchone()
-    if not row:
+
+    # Ambil SEMUA time range untuk nama shift ini
+    rows = db.execute(
+        text("SELECT jam_mulai, jam_akhir FROM dbo.master_settime WHERE nama_shift = :name AND status_active = '1'"),
+        {"name": shift_name}
+    ).fetchall()
+
+    if not rows:
         return "", {}
-        
-    jam_mulai = row[0]
-    jam_akhir = row[1]
-    
+
     prefix = f"{alias}." if alias else ""
-    
-    # Jika overnight shift (misal start 23:00, end 01:00)
-    if jam_mulai > jam_akhir:
-        filter_sql = f" AND (CAST({prefix}update_time AS TIME) >= :jam_mulai OR CAST({prefix}update_time AS TIME) <= :jam_akhir)"
-    else:
-        filter_sql = f" AND CAST({prefix}update_time AS TIME) >= :jam_mulai AND CAST({prefix}update_time AS TIME) <= :jam_akhir"
-        
-    return filter_sql, {"jam_mulai": jam_mulai, "jam_akhir": jam_akhir}
+    col = f"CAST({prefix}update_time AS TIME)"
+
+    conditions = []
+    params = {}
+    for i, row in enumerate(rows):
+        jam_mulai, jam_akhir = row[0], row[1]
+        if jam_mulai > jam_akhir:
+            # Overnight shift (misal 23:00 - 01:00)
+            conditions.append(f"({col} >= :jm_{i} OR {col} <= :ja_{i})")
+        else:
+            conditions.append(f"({col} >= :jm_{i} AND {col} <= :ja_{i})")
+        params[f"jm_{i}"] = jam_mulai
+        params[f"ja_{i}"] = jam_akhir
+
+    # Gabungkan semua time range dengan OR
+    filter_sql = " AND (" + " OR ".join(conditions) + ")"
+    return filter_sql, params
+
 
 
 def get_metrics_data(db: Session, start_date_str: str, end_date_str: str, shift_id: str):
@@ -60,7 +75,29 @@ def get_metrics_data(db: Session, start_date_str: str, end_date_str: str, shift_
     
     # Shift filter
     shift_sql, shift_params = get_shift_filter_sql(db, shift_id)
-    
+
+    # ── Quick-check: ada data di rentang ini? ──────────────────────────────────
+    # Gunakan TOP 1 yang sangat cepat. Jika tidak ada data sama sekali,
+    # langsung return 0 tanpa menjalankan 8 query COUNT/SUM yang berat.
+    quick_sql = f"""
+        SELECT TOP 1 1
+        FROM dbo.monitor_log_datatransaksi
+        WHERE update_time >= :s_dt AND update_time <= :e_dt
+        {shift_sql}
+    """
+    has_data = db.execute(text(quick_sql), {"s_dt": start_dt, "e_dt": end_dt, **shift_params}).fetchone()
+    if not has_data:
+        zero_metric = lambda title, icon: {
+            "title": title, "value": "0", "change": "0.0%", "is_positive": True, "icon": icon
+        }
+        return {
+            "orders":       zero_metric("TAKEN (SUSU DIAMBIL)", "fa-cart-shopping"),
+            "revenue":      zero_metric("TRANSAKSI GAGAL",      "fa-xmark"),
+            "averagePrice": zero_metric("RESTOCK",              "fa-rotate-right"),
+            "productSold":  zero_metric("TAKEN TODAY",          "fa-bag-shopping"),
+        }
+    # ───────────────────────────────────────────────────────────────────────────
+
     # Define generic fetch helpers
     def get_count(kategori, s_dt, e_dt):
         sql = f"""

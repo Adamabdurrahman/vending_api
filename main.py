@@ -444,6 +444,18 @@ def api_latest_transactions(
     return dashboard_service.get_latest_transactions(db, start_date, end_date, shift_id)
 
 
+@app.get("/api/v1/dashboard/shift-options", tags=["Dashboard Summary"])
+def api_shift_options(db: Session = Depends(get_db)):
+    """
+    Mengembalikan daftar nama shift unik dari master_settime yang aktif.
+    Android menggunakan ini untuk populate dropdown filter shift secara dinamis.
+    """
+    rows = db.execute(
+        text("SELECT DISTINCT nama_shift FROM dbo.master_settime WHERE status_active = '1' ORDER BY nama_shift")
+    ).fetchall()
+    return [{"value": row[0], "label": row[0]} for row in rows]
+
+
 # ========================================================
 # KUMPULAN ENDPOINT PREDICTION DASHBOARD (GROUP: PREDICTION)
 # ========================================================
@@ -802,9 +814,14 @@ def get_low_stock_alerts(threshold: int = 10, db: Session = Depends(get_db)):
 
 
 @app.get("/api/v1/restock/vm/{vm_id}", tags=["Restock Management"])
-def get_restock_by_vm(vm_id: int, db: Session = Depends(get_db)):
-    """Semua restock aktif untuk satu vending machine"""
-    return restock_service.get_restock_by_vm(db, vm_id)
+def get_restock_by_vm(
+    vm_id: int,
+    page: int = 1,
+    page_size: int = 10,
+    db: Session = Depends(get_db),
+):
+    """Restock aktif untuk satu vending machine dengan pagination (terbaru di atas)"""
+    return restock_service.get_restock_by_vm(db, vm_id, page, page_size)
 
 
 @app.get("/api/v1/restock/{restock_id}", tags=["Restock Management"])
@@ -857,9 +874,14 @@ def delete_existing_restock(restock_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/api/v1/slot", tags=["Slot Number"])
-def get_slots(vm_id: int, db: Session = Depends(get_db)):
-    """Ambil semua slot untuk satu vending machine"""
-    return slot_service.get_slots_by_vm(db, vm_id)
+def get_slots(
+    vm_id: int,
+    page: int = 1,
+    page_size: int = 10,
+    db: Session = Depends(get_db),
+):
+    """Slot untuk satu vending machine dengan pagination (terbaru di atas)"""
+    return slot_service.get_slots_by_vm(db, vm_id, page, page_size)
 
 
 @app.get("/api/v1/slot/{slot_id}", tags=["Slot Number"])

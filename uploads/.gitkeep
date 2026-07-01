@@ -1,0 +1,3 @@
+# Folder ini dibutuhkan oleh FastAPI untuk menyimpan foto profil user.
+# File .gitkeep ini memastikan folder uploads/ ikut ter-commit ke GitHub
+# meskipun isinya (foto user) di-exclude oleh .gitignore.

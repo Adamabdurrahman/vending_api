@@ -33,24 +33,40 @@ def _serialize(slot: models.SlotNumber) -> dict:
     }
 
 
-def get_slots_by_vm(db: Session, vm_id: int) -> dict:
-    slots = (
+def get_slots_by_vm(db: Session, vm_id: int, page: int = 1, page_size: int = 10) -> dict:
+    # Query total dulu untuk hitung pages dan stats
+    all_slots = (
         db.query(models.SlotNumber)
         .filter(models.SlotNumber.id_recnum_mav == vm_id)
-        .order_by(models.SlotNumber.slot_name)
         .all()
     )
-    if not slots:
+    if not all_slots:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Tidak ada slot untuk VM ID {vm_id}",
         )
-    total_capacity = sum(s.slot_number_max for s in slots)
+    total_rows = len(all_slots)
+    total_capacity = sum(s.slot_number_max for s in all_slots)
+    total_pages = max(1, -(-total_rows // page_size))  # ceiling division
+    page = max(1, min(page, total_pages))
+    skip = (page - 1) * page_size
+
+    # Query dengan pagination + sort terbaru di atas (id DESC)
+    paginated_slots = (
+        db.query(models.SlotNumber)
+        .filter(models.SlotNumber.id_recnum_mav == vm_id)
+        .order_by(models.SlotNumber.id_recnum_msn.desc())
+        .offset(skip)
+        .limit(page_size)
+        .all()
+    )
     return {
         "id_recnum_mav": vm_id,
-        "total_rows": len(slots),
+        "total_rows": total_rows,
         "total_capacity": total_capacity,
-        "slots": [_serialize(s) for s in slots],
+        "total_pages": total_pages,
+        "current_page": page,
+        "slots": [_serialize(s) for s in paginated_slots],
     }
 
 

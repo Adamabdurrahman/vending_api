@@ -75,28 +75,46 @@ def get_restock_by_id(db: Session, restock_id: int) -> dict:
     return _serialize(restock)
 
 
-def get_restock_by_vm(db: Session, vm_id: int) -> dict:
-    restocks = (
+def get_restock_by_vm(db: Session, vm_id: int, page: int = 1, page_size: int = 10) -> dict:
+    # Query semua dulu untuk total stats dan total_pages
+    all_restocks = (
         db.query(models.Restock)
         .filter(
             models.Restock.id_recnum_mav == vm_id, models.Restock.status_restok == "1"
         )
-        .order_by(models.Restock.slot_number)
         .all()
     )
 
-    if not restocks:
+    if not all_restocks:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Tidak ada restock aktif untuk VM ID {vm_id}",
         )
 
-    total_qty = sum(r.stok_qty for r in restocks)
+    total_slots = len(all_restocks)
+    total_qty = sum(r.stok_qty for r in all_restocks)
+    total_pages = max(1, -(-total_slots // page_size))  # ceiling division
+    page = max(1, min(page, total_pages))
+    skip = (page - 1) * page_size
+
+    # Query dengan pagination + sort terbaru di atas (update_time DESC)
+    paginated = (
+        db.query(models.Restock)
+        .filter(
+            models.Restock.id_recnum_mav == vm_id, models.Restock.status_restok == "1"
+        )
+        .order_by(models.Restock.update_time.desc())
+        .offset(skip)
+        .limit(page_size)
+        .all()
+    )
     return {
         "id_recnum_mav": vm_id,
-        "total_slots": len(restocks),
+        "total_slots": total_slots,
         "total_qty": total_qty,
-        "restocks": [_serialize(r) for r in restocks],
+        "total_pages": total_pages,
+        "current_page": page,
+        "restocks": [_serialize(r) for r in paginated],
     }
 
 

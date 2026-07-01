@@ -17,8 +17,10 @@ retrain_log.txt
 ProductionML/backups/
 *.joblib
 
-# === User Uploads (profile photos, runtime files) ===
-uploads/
+# === User Uploads (profile photos) ===
+# Abaikan semua file di dalam uploads/, tapi JAGA folder-nya via .gitkeep
+uploads/*
+!uploads/.gitkeep
 
 # === Development-only scratch & test scripts ===
 scratch_*.py
